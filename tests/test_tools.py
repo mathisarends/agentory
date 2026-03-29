@@ -1,7 +1,9 @@
+from typing import Annotated
 from unittest.mock import AsyncMock
 
 import pytest
 
+from agentory.tools.inject import Inject
 from agentory.tools.tools import Tools
 from agentory.tools.views import Tool
 
@@ -81,54 +83,93 @@ class TestToolsExecute:
         assert "boom" in result
 
 
-class TestToolsContext:
+class TestToolsProvide:
     @pytest.mark.asyncio
-    async def test_single_context_forwarded_to_tool(self) -> None:
+    async def test_single_dependency_injected(self) -> None:
         tools = Tools()
 
         @tools.action(description="uses context")
-        def ctx_tool(x: str, ctx: _FakeContext = None) -> str:
+        def ctx_tool(x: str, ctx: Annotated[_FakeContext, Inject] = None) -> str:
             return f"{x}:{ctx.value}"
 
-        tools.set_context(_FakeContext("my_context"))
+        tools.provide(_FakeContext("my_context"))
         result = await tools.execute("ctx_tool", {"x": "val"})
         assert result == "val:my_context"
 
     @pytest.mark.asyncio
-    async def test_multiple_contexts_injected(self) -> None:
+    async def test_multiple_dependencies_injected(self) -> None:
         tools = Tools()
 
         @tools.action(description="needs both")
-        def multi(x: str, ctx: _FakeContext = None, svc: _AnotherService = None) -> str:
+        def multi(
+            x: str,
+            ctx: Annotated[_FakeContext, Inject] = None,
+            svc: Annotated[_AnotherService, Inject] = None,
+        ) -> str:
             return f"{x}:{ctx.value}:{svc.name}"
 
-        tools.set_context(_FakeContext("fc"), _AnotherService("as"))
+        tools.provide(_FakeContext("fc"), _AnotherService("as"))
         result = await tools.execute("multi", {"x": "hi"})
         assert result == "hi:fc:as"
 
     @pytest.mark.asyncio
-    async def test_tool_only_gets_matching_context(self) -> None:
+    async def test_tool_only_gets_matching_dependency(self) -> None:
         tools = Tools()
 
         @tools.action(description="only needs one")
-        def single(x: str, svc: _AnotherService = None) -> str:
+        def single(x: str, svc: Annotated[_AnotherService, Inject] = None) -> str:
             return f"{x}:{svc.name}"
 
-        tools.set_context(_FakeContext("ignored"), _AnotherService("used"))
+        tools.provide(_FakeContext("ignored"), _AnotherService("used"))
         result = await tools.execute("single", {"x": "hi"})
         assert result == "hi:used"
 
     @pytest.mark.asyncio
-    async def test_no_context_params_unaffected(self) -> None:
+    async def test_no_inject_params_unaffected(self) -> None:
         tools = Tools()
 
         @tools.action(description="plain tool")
         def plain(x: str) -> str:
             return f"plain:{x}"
 
-        tools.set_context(_FakeContext("ctx"))
+        tools.provide(_FakeContext("ctx"))
         result = await tools.execute("plain", {"x": "a"})
         assert result == "plain:a"
+
+    def test_provide_extends_not_replaces(self) -> None:
+        tools = Tools()
+        tools.provide(_FakeContext("a"))
+        tools.provide(_AnotherService("b"))
+        assert len(tools._context) == 2
+
+    def test_provide_returns_self_for_chaining(self) -> None:
+        tools = Tools()
+        result = tools.provide(_FakeContext("a"))
+        assert result is tools
+
+    def test_clear_dependencies(self) -> None:
+        tools = Tools()
+        tools.provide(_FakeContext("a"), _AnotherService("b"))
+        tools.clear_dependencies()
+        assert len(tools._context) == 0
+
+    def test_clear_dependencies_returns_self(self) -> None:
+        tools = Tools()
+        result = tools.clear_dependencies()
+        assert result is tools
+
+    @pytest.mark.asyncio
+    async def test_unannotated_custom_type_not_injected(self) -> None:
+        """A custom-class param WITHOUT Inject is NOT injected — it's explicit opt-in."""
+        tools = Tools()
+
+        @tools.action(description="bare custom type")
+        def bare(x: str, ctx: _FakeContext = None) -> str:
+            return f"{x}:{ctx}"
+
+        tools.provide(_FakeContext("should_not_appear"))
+        result = await tools.execute("bare", {"x": "hi"})
+        assert result == "hi:None"
 
 
 class TestToolsSchema:

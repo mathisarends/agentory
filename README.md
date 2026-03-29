@@ -60,39 +60,19 @@ Agent(
     mcp_servers: list[MCPServer] | None = None,
     skills: list[Skill] | None = None,
     max_iterations: int = 10,
-    context: T | None = None,
 )
 ```
 
 The main agent class. Call `agent.run(task)` to get an `AsyncIterator[StreamEvent]` that yields either plain `str` chunks or `ToolCallEvent` objects.
 
-`context` is an arbitrary value (or tuple/list of values) injected into every tool function that declares a matching parameter type. Parameters with non-JSON types (custom classes) are automatically detected and filled from the context.
+MCP servers are connected automatically on the first `run()` call. Call `await agent.close()` when done to clean up MCP connections. The async context manager (`async with`) is also supported as an alternative.
 
 ```python
-from agentory import Agent, Tools
-
-class SpotifyClient: ...
-class UnsplashClient: ...
-
-tools = Tools()
-
-@tools.action("Search tracks on Spotify.")
-async def search_tracks(spotify: SpotifyClient, query: str) -> str:
-    ...
-
-@tools.action("Search photos on Unsplash.")
-async def search_photos(unsplash: UnsplashClient, query: str) -> str:
-    ...
-
-agent = Agent(
-    instructions="...",
-    llm=llm,
-    tools=tools,
-    context=(SpotifyClient(), UnsplashClient()),
-)
+agent = Agent(instructions="...", llm=llm, mcp_servers=[server])
+async for event in agent.run("Do something"):
+    print(event)
+await agent.close()
 ```
-
-Each tool only receives the context objects whose types match its parameter annotations. Primitive-typed parameters (`str`, `int`, `bool`, `float`, `list`, `dict`) are treated as normal LLM-provided arguments.
 
 ### `Tools`
 
@@ -111,6 +91,40 @@ async def fetch(url: str) -> str:
 - **`status`** – a string or callable producing a human-readable status shown during streaming.
 
 Type hints on parameters are automatically converted to JSON Schema. Use `Annotated[str, "description"]` to attach per-parameter descriptions.
+
+#### Dependency Injection with `Inject`
+
+Use `tools.provide()` to register dependencies and `Annotated[..., Inject]` to mark parameters for injection. Only parameters explicitly marked with `Inject` are injected — no magic type guessing.
+
+```python
+from typing import Annotated
+from agentory import Agent, Inject, Tools
+
+class SpotifyClient: ...
+class UnsplashClient: ...
+
+tools = Tools()
+tools.provide(SpotifyClient(), UnsplashClient())
+
+@tools.action("Search tracks on Spotify.")
+async def search_tracks(spotify: Annotated[SpotifyClient, Inject], query: str) -> str:
+    ...
+
+@tools.action("Search photos on Unsplash.")
+async def search_photos(unsplash: Annotated[UnsplashClient, Inject], query: str) -> str:
+    ...
+
+agent = Agent(instructions="...", llm=llm, tools=tools)
+```
+
+`provide()` extends (not replaces) the dependency list and returns `self` for chaining:
+
+```python
+tools = Tools()
+tools.provide(spotify_client).provide(unsplash_client)
+```
+
+Use `tools.clear_dependencies()` to reset all registered dependencies.
 
 ### `Tool`
 
@@ -154,10 +168,10 @@ server = MCPServerStdio(
     args=["-y", "@modelcontextprotocol/server-filesystem", "/tmp"],
 )
 
-async with server:
-    agent = Agent(instructions="...", llm=llm, mcp_servers=[server])
-    async for event in agent.run("List files in /tmp"):
-        print(event)
+agent = Agent(instructions="...", llm=llm, mcp_servers=[server])
+async for event in agent.run("List files in /tmp"):
+    print(event)
+await agent.close()
 ```
 
 **Options:**

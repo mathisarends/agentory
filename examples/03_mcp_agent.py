@@ -23,16 +23,19 @@ async def main() -> None:
         allowed_tools=["read_file", "write_file", "list_directory"],
     )
 
-    async with Agent(
+    agent = Agent(
         instructions=f"You are a file assistant. The working directory is {WORK_DIR}.",
         llm=llm,
         mcp_servers=[server],
-    ) as agent:
-        async for event in agent.run(f"List the files in {WORK_DIR}."):
-            if isinstance(event, ToolCallEvent):
-                print(f"[tool] {event.tool_name}: {event.status or ''}")
-            else:
-                print(event)
+    )
+
+    async for event in agent.run(f"List the files in {WORK_DIR}."):
+        if isinstance(event, ToolCallEvent):
+            print(f"[tool] {event.tool_name}: {event.status or ''}")
+        else:
+            print(event)
+
+    await agent.close()
 
 
 if __name__ == "__main__":

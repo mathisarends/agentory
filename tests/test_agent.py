@@ -138,24 +138,57 @@ class TestAgentReset:
         assert agent._history[0].content == "test"
 
 
-class TestAgentAsyncContext:
+class TestAgentMCP:
     @pytest.mark.asyncio
-    async def test_aenter_connects_mcp_servers(self) -> None:
+    async def test_run_connects_mcp_servers(self) -> None:
         llm = AsyncMock()
+        llm.invoke.return_value = _make_llm_response(completion="Hi")
+        mock_server = AsyncMock()
+        mock_server.list_tools.return_value = []
+
+        agent = Agent(instructions="test", llm=llm, mcp_servers=[mock_server])
+        async for _ in agent.run("Hi"):
+            pass
+
+        mock_server.connect.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_run_connects_only_once(self) -> None:
+        llm = AsyncMock()
+        llm.invoke.return_value = _make_llm_response(completion="Hi")
+        mock_server = AsyncMock()
+        mock_server.list_tools.return_value = []
+
+        agent = Agent(instructions="test", llm=llm, mcp_servers=[mock_server])
+        async for _ in agent.run("Hi"):
+            pass
+        async for _ in agent.run("Hi again"):
+            pass
+
+        mock_server.connect.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_close_cleans_up_mcp_servers(self) -> None:
+        llm = AsyncMock()
+        llm.invoke.return_value = _make_llm_response(completion="Hi")
+        mock_server = AsyncMock()
+        mock_server.list_tools.return_value = []
+
+        agent = Agent(instructions="test", llm=llm, mcp_servers=[mock_server])
+        async for _ in agent.run("Hi"):
+            pass
+        await agent.close()
+
+        mock_server.cleanup.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_async_context_manager_still_works(self) -> None:
+        llm = AsyncMock()
+        llm.invoke.return_value = _make_llm_response(completion="Hi")
         mock_server = AsyncMock()
         mock_server.list_tools.return_value = []
 
         agent = Agent(instructions="test", llm=llm, mcp_servers=[mock_server])
         async with agent:
             mock_server.connect.assert_awaited_once()
-
-    @pytest.mark.asyncio
-    async def test_aexit_cleans_up_mcp_servers(self) -> None:
-        llm = AsyncMock()
-        mock_server = AsyncMock()
-        mock_server.list_tools.return_value = []
-
-        agent = Agent(instructions="test", llm=llm, mcp_servers=[mock_server])
-        async with agent:
-            pass
         mock_server.cleanup.assert_awaited_once()

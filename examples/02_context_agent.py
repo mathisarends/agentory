@@ -1,11 +1,12 @@
-"""Agent with typed context — tools receive shared state via the context argument."""
+"""Agent with dependency injection — tools receive shared state via Inject."""
 
 import asyncio
 from dataclasses import dataclass, field
+from typing import Annotated
 
 from llmify import ChatOpenAI
 
-from agentory import Agent, ToolCallEvent, Tools
+from agentory import Agent, Inject, ToolCallEvent, Tools
 from dotenv import load_dotenv
 
 load_dotenv(override=True)
@@ -19,13 +20,13 @@ class AppContext:
 
 
 @tools.action(description="Save a note", status=lambda a: f"Saving note: {a['text']!r}")
-def save_note(text: str, context: AppContext) -> str:
+def save_note(text: str, context: Annotated[AppContext, Inject]) -> str:
     context.notes.append(text)
     return f"Saved: {text!r}"
 
 
 @tools.action(description="List all saved notes")
-def list_notes(context: AppContext) -> str:
+def list_notes(context: Annotated[AppContext, Inject]) -> str:
     if not context.notes:
         return "No notes saved yet."
     return "\n".join(f"- {n}" for n in context.notes)
@@ -33,12 +34,13 @@ def list_notes(context: AppContext) -> str:
 
 async def main() -> None:
     ctx = AppContext()
+    tools.provide(ctx)
+
     llm = ChatOpenAI(model="gpt-5.4-mini")
     agent = Agent(
         instructions="You are a note-taking assistant.",
         llm=llm,
         tools=tools,
-        context=ctx,
     )
 
     async for event in agent.run("Save a note saying 'Buy milk', then list all notes."):

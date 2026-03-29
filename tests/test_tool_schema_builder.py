@@ -1,7 +1,7 @@
 import collections.abc
 from typing import Annotated
 
-
+from agentory.tools.inject import Inject
 from agentory.tools.schema_builder import ToolSchemaBuilder
 
 
@@ -141,11 +141,20 @@ class TestSkippedParams:
         assert "self" not in schema["properties"]
         assert "name" in schema["properties"]
 
-    def test_context_type_is_skipped(self) -> None:
-        def fn(svc: SimpleModel, name: str) -> None: ...
+    def test_inject_param_is_skipped(self) -> None:
+        def fn(svc: Annotated[SimpleModel, Inject], name: str) -> None: ...
 
         schema = _build(fn)
         assert "svc" not in schema["properties"]
+        assert "name" in schema["properties"]
+
+    def test_bare_custom_type_is_not_skipped(self) -> None:
+        """A custom class WITHOUT Inject should appear in the schema (not auto-skipped)."""
+
+        def fn(svc: SimpleModel, name: str) -> None: ...
+
+        schema = _build(fn)
+        assert "svc" in schema["properties"]
         assert "name" in schema["properties"]
 
     def test_cls_is_skipped(self) -> None:

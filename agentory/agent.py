@@ -14,7 +14,7 @@ from llmify.messages import (
 )
 
 from agentory.skills import Skill
-from agentory.tools.tools import Tools
+from agentory.tools import Tools
 from agentory.views import StreamEvent, ToolCallEvent
 
 if TYPE_CHECKING:
@@ -24,7 +24,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-class Agent[T]:
+class Agent:
     def __init__(
         self,
         instructions: str,
@@ -33,20 +33,14 @@ class Agent[T]:
         mcp_servers: list[MCPServer] | None = None,
         skills: list[Skill] | None = None,
         max_iterations: int = 10,
-        context: T | None = None,
     ) -> None:
         self.llm = llm
         self._instructions = instructions
         self.tools = tools or Tools()
-        if context is not None:
-            self.tools.set_context(context) if not isinstance(
-                context, (list, tuple)
-            ) else self.tools.set_context(*context)
-
         self._mcp_servers = mcp_servers or []
         self._skills = skills or []
         self._max_iterations = max_iterations
-        self._context: T | None = context
+        self._mcp_connected = False
 
         self._history = [SystemMessage(content=self._build_system_prompt())]
 
@@ -56,7 +50,7 @@ class Agent[T]:
         skills_block = "\n\n".join(skill.render() for skill in self._skills)
         return f"{self._instructions}\n\n<skills>\n{skills_block}\n</skills>"
 
-    async def __aenter__(self) -> Agent[T]:
+    async def __aenter__(self) -> Agent:
         await self._connect_mcp_servers()
         return self
 
@@ -64,6 +58,7 @@ class Agent[T]:
         await self._cleanup_mcp_servers()
 
     async def run(self, task: str) -> AsyncIterator[StreamEvent]:
+        await self._connect_mcp_servers()
         self._history.append(UserMessage(content=task))
         schema = self.tools.to_schema() or None
         iterations = 0
@@ -103,13 +98,22 @@ class Agent[T]:
                 )
 
     async def _connect_mcp_servers(self) -> None:
+        if self._mcp_connected:
+            return
         for server in self._mcp_servers:
             await server.connect()
             await self.tools.register_mcp_server(server)
+        self._mcp_connected = True
 
     async def _cleanup_mcp_servers(self) -> None:
+        if not self._mcp_connected:
+            return
         for server in self._mcp_servers:
             await server.cleanup()
+        self._mcp_connected = False
+
+    async def close(self) -> None:
+        await self._cleanup_mcp_servers()
 
     def reset(self) -> None:
         self._history = [SystemMessage(content=self._build_system_prompt())]

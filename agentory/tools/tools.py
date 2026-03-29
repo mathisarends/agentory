@@ -3,9 +3,9 @@ from __future__ import annotations
 import inspect
 import logging
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Any, get_type_hints
+from typing import TYPE_CHECKING, Annotated, Any, get_args, get_origin, get_type_hints
 
-from agentory.tools.schema_builder import is_context_type
+from agentory.tools.inject import Inject
 from agentory.tools.views import Tool
 
 if TYPE_CHECKING:
@@ -19,8 +19,13 @@ class Tools:
         self._tools: dict[str, Tool] = {}
         self._context: list[Any] = []
 
-    def set_context(self, *args: Any) -> None:
-        self._context = list(args)
+    def provide(self, *dependencies: Any) -> Tools:
+        self._context.extend(dependencies)
+        return self
+
+    def clear_dependencies(self) -> Tools:
+        self._context.clear()
+        return self
 
     def get(self, name: str) -> Tool | None:
         return self._tools.get(name)
@@ -58,20 +63,23 @@ class Tools:
         if not self._context:
             return dict(args)
         kwargs = dict(args)
-        hints = get_type_hints(tool.fn)
+        hints = get_type_hints(tool.fn, include_extras=True)
         for param_name in inspect.signature(tool.fn).parameters:
-            if param_name in ("self", "cls"):
-                continue
             hint = hints.get(param_name)
-            if hint is not None and is_context_type(hint):
-                for ctx in self._context:
-                    try:
-                        if isinstance(ctx, hint):
-                            kwargs[param_name] = ctx
-                            break
-                    except TypeError:
-                        pass
+            if hint is None or not self._is_injectable(hint):
+                continue
+            actual_type = get_args(hint)[0]
+            for ctx in self._context:
+                if isinstance(ctx, actual_type):
+                    kwargs[param_name] = ctx
+                    break
         return kwargs
+
+    @staticmethod
+    def _is_injectable(hint: Any) -> bool:
+        if get_origin(hint) is not Annotated:
+            return False
+        return Inject in get_args(hint)
 
     async def register_mcp_server(self, server: MCPServer) -> None:
         tools = await server.list_tools()
