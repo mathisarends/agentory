@@ -44,9 +44,9 @@ class Agent[T]:
         self._mcp_servers = mcp_servers or []
         self._skills = skills or []
         self._max_iterations = max_iterations
-        self._context: T | None = None
+        self._context: T | None = context
         
-        self._history: list[Message] = [SystemMessage(content=self._build_system_prompt())]
+        self._history = [SystemMessage(content=self._build_system_prompt())]
 
     def _build_system_prompt(self) -> str:
         if not self._skills:
@@ -91,9 +91,12 @@ class Agent[T]:
                     tool_name=call.function.name,
                     status=tool.render_status(tool_args) if tool else None,
                 )
-                result = await self.tools.execute(
-                    call.function.name, tool_args
-                )
+                try:
+                    result = await self.tools.execute(call.function.name, tool_args)
+                except Exception as e:
+                    result = json.dumps({"error": str(e), "tool": call.function.name})
+                    
+                self._history.append(ToolResultMessage(tool_call_id=call.id, content=result))
                 self._history.append(
                     ToolResultMessage(tool_call_id=call.id, content=result)
                 )
@@ -108,4 +111,4 @@ class Agent[T]:
             await server.cleanup()
 
     def reset(self) -> None:
-        self._history = [SystemMessage(content=self._instructions)]
+        self._history = [SystemMessage(content=self._build_system_prompt())]

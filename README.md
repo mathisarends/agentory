@@ -6,8 +6,12 @@ A lightweight Python library for building tool-calling agents.
 
 ```bash
 pip install agentory
-# with a specific LLM backend:
-pip install "agentory[openai]"
+```
+
+Install only the providers you actually need
+
+```bash
+pip install "agentory[openai]" # + azure
 pip install "agentory[anthropic]"
 pip install "agentory[all]"
 ```
