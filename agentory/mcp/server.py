@@ -11,12 +11,12 @@ from typing_extensions import Doc
 
 from agentory.mcp.schemas import (
     ClientInfo,
-    InitializeParams, 
-    JsonRpcNotification, 
-    JsonRpcRequest, 
-    JsonRpcResponse, 
-    MCPToolDefinition, 
-    MCPToolsListResult
+    InitializeParams,
+    JsonRpcNotification,
+    JsonRpcRequest,
+    JsonRpcResponse,
+    MCPToolDefinition,
+    MCPToolsListResult,
 )
 from agentory.tools.views import Tool
 

@@ -1,7 +1,7 @@
 [project]
 name = "agentory"
 version = "0.1.0"
-description = "A lightweight Python library for building tool-calling agents"
+description = "Minimal agent runtime with MCP integration, declarative tools, and streaming"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [

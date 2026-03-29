@@ -6,12 +6,16 @@ from llmify import ChatOpenAI
 
 from agentory import Agent, ToolCallEvent, Tools
 from dotenv import load_dotenv
+
 load_dotenv(override=True)
 
 tools = Tools()
 
 
-@tools.action(description="Add two numbers together", status=lambda a: f"Adding {a['x']} + {a['y']}")
+@tools.action(
+    description="Add two numbers together",
+    status=lambda a: f"Adding {a['x']} + {a['y']}",
+)
 def add(x: float, y: float) -> float:
     return x + y
 

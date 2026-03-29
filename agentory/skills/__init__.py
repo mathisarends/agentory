@@ -37,7 +37,7 @@ class Skill:
 
     def render(self) -> str:
         return (
-            f"<skill name=\"{self.name}\">\n"
+            f'<skill name="{self.name}">\n'
             f"<description>{self.description}</description>\n"
             f"{self.instructions}\n"
             f"</skill>"

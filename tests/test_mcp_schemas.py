@@ -58,9 +58,7 @@ class TestJsonRpcNotification:
 
 class TestInitializeParams:
     def test_default_protocol_version(self) -> None:
-        params = InitializeParams(
-            clientInfo=ClientInfo(name="test", version="0.1")
-        )
+        params = InitializeParams(clientInfo=ClientInfo(name="test", version="0.1"))
         assert params.protocolVersion == "2024-11-05"
         assert params.capabilities == {}
 
@@ -92,12 +90,14 @@ class TestMCPToolsListResult:
         assert result.tools == []
 
     def test_parse_tools_list(self) -> None:
-        result = MCPToolsListResult.model_validate({
-            "tools": [
-                {"name": "t1", "description": "Tool 1"},
-                {"name": "t2"},
-            ]
-        })
+        result = MCPToolsListResult.model_validate(
+            {
+                "tools": [
+                    {"name": "t1", "description": "Tool 1"},
+                    {"name": "t2"},
+                ]
+            }
+        )
         assert len(result.tools) == 2
         assert result.tools[0].name == "t1"
         assert result.tools[1].description is None

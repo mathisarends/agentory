@@ -7,12 +7,16 @@ from llmify import ChatOpenAI
 from agentory import Agent, Skill, ToolCallEvent, Tools
 
 from dotenv import load_dotenv
+
 load_dotenv(override=True)
 
 tools = Tools()
 
 
-@tools.action(description="Search the web for a query", status=lambda a: f"Searching: {a['query']!r}")
+@tools.action(
+    description="Search the web for a query",
+    status=lambda a: f"Searching: {a['query']!r}",
+)
 async def web_search(query: str) -> str:
     # Stub — replace with a real search call.
     return f"[search results for '{query}']"

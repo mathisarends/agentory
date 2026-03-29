@@ -1,7 +1,6 @@
 from pathlib import Path
 from textwrap import dedent
 
-import pytest
 
 from agentory.skills import Skill
 

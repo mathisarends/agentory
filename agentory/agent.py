@@ -8,7 +8,6 @@ from typing import TYPE_CHECKING
 from llmify import ChatModel
 from llmify.messages import (
     AssistantMessage,
-    Message,
     SystemMessage,
     ToolResultMessage,
     UserMessage,
@@ -45,7 +44,7 @@ class Agent[T]:
         self._skills = skills or []
         self._max_iterations = max_iterations
         self._context: T | None = context
-        
+
         self._history = [SystemMessage(content=self._build_system_prompt())]
 
     def _build_system_prompt(self) -> str:
@@ -53,11 +52,11 @@ class Agent[T]:
             return self._instructions
         skills_block = "\n\n".join(skill.render() for skill in self._skills)
         return f"{self._instructions}\n\n<skills>\n{skills_block}\n</skills>"
-    
+
     async def __aenter__(self) -> Agent[T]:
         await self._connect_mcp_servers()
         return self
-        
+
     async def __aexit__(self, *_) -> None:
         await self._cleanup_mcp_servers()
 
@@ -95,8 +94,10 @@ class Agent[T]:
                     result = await self.tools.execute(call.function.name, tool_args)
                 except Exception as e:
                     result = json.dumps({"error": str(e), "tool": call.function.name})
-                    
-                self._history.append(ToolResultMessage(tool_call_id=call.id, content=result))
+
+                self._history.append(
+                    ToolResultMessage(tool_call_id=call.id, content=result)
+                )
                 self._history.append(
                     ToolResultMessage(tool_call_id=call.id, content=result)
                 )

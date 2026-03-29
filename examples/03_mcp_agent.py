@@ -8,6 +8,7 @@ from llmify import ChatOpenAI
 from agentory import Agent, MCPServerStdio, ToolCallEvent
 
 from dotenv import load_dotenv
+
 load_dotenv(override=True)
 
 WORK_DIR = Path.home() / "agentory-demo"

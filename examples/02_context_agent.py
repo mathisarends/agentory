@@ -7,6 +7,7 @@ from llmify import ChatOpenAI
 
 from agentory import Agent, ToolCallEvent, Tools
 from dotenv import load_dotenv
+
 load_dotenv(override=True)
 
 tools = Tools()

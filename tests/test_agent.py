@@ -1,5 +1,5 @@
 import json
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from llmify.messages import Function, ToolCall
@@ -78,7 +78,9 @@ class TestAgentRun:
         async for event in agent.run("add 1+2"):
             events.append(event)
 
-        assert any(isinstance(e, ToolCallEvent) and e.tool_name == "add" for e in events)
+        assert any(
+            isinstance(e, ToolCallEvent) and e.tool_name == "add" for e in events
+        )
         assert "The sum is 3" in events
 
     @pytest.mark.asyncio
