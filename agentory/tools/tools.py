@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import inspect
 import logging
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, get_type_hints
 
+from agentory.tools.schema_builder import is_context_type
 from agentory.tools.views import Tool
 
 if TYPE_CHECKING:
@@ -47,10 +49,28 @@ class Tools:
         if tool is None:
             raise ValueError(f"Unknown tool '{name}'. Available: {list(self._tools)}")
         try:
-            return await tool.execute(args, context=self._context)
+            return await tool.execute(self._resolve_args(tool, args))
         except Exception as e:
             logger.exception("Tool '%s' raised an exception", name)
             return f"Error: {e}"
+
+    def _resolve_args(self, tool: Tool, args: dict) -> dict:
+        if self._context is None:
+            return dict(args)
+        kwargs = dict(args)
+        hints = get_type_hints(tool.fn)
+        for param_name in inspect.signature(tool.fn).parameters:
+            if param_name in ("self", "cls"):
+                continue
+            hint = hints.get(param_name)
+            if hint is not None and is_context_type(hint):
+                try:
+                    if isinstance(self._context, hint):
+                        kwargs[param_name] = self._context
+                        break
+                except TypeError:
+                    pass
+        return kwargs
 
     async def register_mcp_server(self, server: MCPServer) -> None:
         tools = await server.list_tools()

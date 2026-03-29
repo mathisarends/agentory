@@ -98,9 +98,6 @@ class Agent[T]:
                 self._history.append(
                     ToolResultMessage(tool_call_id=call.id, content=result)
                 )
-                self._history.append(
-                    ToolResultMessage(tool_call_id=call.id, content=result)
-                )
 
     async def _connect_mcp_servers(self) -> None:
         for server in self._mcp_servers:

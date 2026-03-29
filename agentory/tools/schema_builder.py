@@ -4,6 +4,36 @@ import types
 from collections.abc import Callable
 from typing import Annotated, Any, ClassVar, Union, get_args, get_origin, get_type_hints
 
+_JSON_TYPES: set[type] = {str, int, float, bool, list, dict}
+_COLLECTION_ORIGINS: tuple[type, ...] = (
+    list,
+    dict,
+    collections.abc.Sequence,
+    collections.abc.Iterable,
+    collections.abc.Collection,
+)
+
+
+def is_context_type(hint: Any) -> bool:
+    """Return *True* if *hint* is a non-JSON type (injected as context)."""
+    if get_origin(hint) is Annotated:
+        hint = get_args(hint)[0]
+
+    origin = get_origin(hint)
+    if origin is Union or isinstance(hint, types.UnionType):
+        non_none = [a for a in get_args(hint) if a is not type(None)]
+        if len(non_none) == 1:
+            return is_context_type(non_none[0])
+        return False
+
+    if hint in _JSON_TYPES or hint is Any:
+        return False
+
+    if origin is not None and origin in _COLLECTION_ORIGINS:
+        return False
+
+    return True
+
 
 class ToolSchemaBuilder:
     _PRIMITIVE_TYPES: ClassVar[dict[type, str]] = {
@@ -32,10 +62,12 @@ class ToolSchemaBuilder:
         required: list[str] = []
 
         for param_name, param in sig.parameters.items():
-            if param_name in ("self", "cls", "context"):
+            if param_name in ("self", "cls"):
                 continue
 
             hint = hints.get(param_name, str)
+            if is_context_type(hint):
+                continue
             actual_type, description = self._extract_type_and_description(hint)
             properties[param_name] = self._to_json_property(actual_type, description)
 

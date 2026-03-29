@@ -1,5 +1,3 @@
-from typing import Any
-
 import pytest
 
 from agentory.tools.views import Tool
@@ -11,10 +9,6 @@ def _sync_fn(name: str) -> str:
 
 async def _async_fn(name: str) -> str:
     return f"async hello {name}"
-
-
-def _fn_with_context(query: str, context: Any = None) -> str:
-    return f"{query} ctx={context}"
 
 
 class TestToolExecute:
@@ -32,9 +26,12 @@ class TestToolExecute:
 
     @pytest.mark.asyncio
     async def test_context_passed_to_function(self) -> None:
-        tool = Tool(name="search", description="search", fn=_fn_with_context)
-        result = await tool.execute({"query": "test"}, context="my_ctx")
-        assert result == "test ctx=my_ctx"
+        def fn(x: str, y: str = "") -> str:
+            return f"{x}:{y}"
+
+        tool = Tool(name="t", description="t", fn=fn)
+        result = await tool.execute({"x": "a", "y": "b"})
+        assert result == "a:b"
 
     @pytest.mark.asyncio
     async def test_none_return_gives_empty_string(self) -> None:

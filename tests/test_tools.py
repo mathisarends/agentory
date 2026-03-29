@@ -14,6 +14,11 @@ async def _async_dummy(x: str) -> str:
     return f"async:{x}"
 
 
+class _FakeContext:
+    def __init__(self, value: str) -> None:
+        self.value = value
+
+
 class TestToolsRegisterAndGet:
     def test_register_via_action_decorator(self) -> None:
         tools = Tools()
@@ -77,10 +82,10 @@ class TestToolsContext:
         tools = Tools()
 
         @tools.action(description="uses context")
-        def ctx_tool(x: str, context: str = "") -> str:
-            return f"{x}:{context}"
+        def ctx_tool(x: str, ctx: _FakeContext = None) -> str:
+            return f"{x}:{ctx.value}"
 
-        tools.set_context("my_context")
+        tools.set_context(_FakeContext("my_context"))
         result = await tools.execute("ctx_tool", {"x": "val"})
         assert result == "val:my_context"
 
