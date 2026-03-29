@@ -52,14 +52,11 @@ class Tool:
             return self.status(args)
         return self.status
 
-    async def execute(self, args: dict[str, Any], context: Any = None) -> str:
-        kwargs = dict(args)
-        if "context" in inspect.signature(self.fn).parameters:
-            kwargs["context"] = context
+    async def execute(self, args: dict[str, Any]) -> str:
         if inspect.iscoroutinefunction(self.fn):
-            result = await self.fn(**kwargs)
+            result = await self.fn(**args)
         else:
-            result = self.fn(**kwargs)
+            result = self.fn(**args)
         return str(result) if result is not None else ""
 
     def to_schema(self) -> dict:

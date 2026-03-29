@@ -141,11 +141,11 @@ class TestSkippedParams:
         assert "self" not in schema["properties"]
         assert "name" in schema["properties"]
 
-    def test_context_is_skipped(self) -> None:
-        def fn(context: str, name: str) -> None: ...
+    def test_context_type_is_skipped(self) -> None:
+        def fn(svc: SimpleModel, name: str) -> None: ...
 
         schema = _build(fn)
-        assert "context" not in schema["properties"]
+        assert "svc" not in schema["properties"]
         assert "name" in schema["properties"]
 
     def test_cls_is_skipped(self) -> None:
