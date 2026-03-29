@@ -17,10 +17,10 @@ logger = logging.getLogger(__name__)
 class Tools:
     def __init__(self) -> None:
         self._tools: dict[str, Tool] = {}
-        self._context: Any = None
+        self._context: list[Any] = []
 
-    def set_context(self, context: Any) -> None:
-        self._context = context
+    def set_context(self, *args: Any) -> None:
+        self._context = list(args)
 
     def get(self, name: str) -> Tool | None:
         return self._tools.get(name)
@@ -55,7 +55,7 @@ class Tools:
             return f"Error: {e}"
 
     def _resolve_args(self, tool: Tool, args: dict) -> dict:
-        if self._context is None:
+        if not self._context:
             return dict(args)
         kwargs = dict(args)
         hints = get_type_hints(tool.fn)
@@ -64,12 +64,13 @@ class Tools:
                 continue
             hint = hints.get(param_name)
             if hint is not None and is_context_type(hint):
-                try:
-                    if isinstance(self._context, hint):
-                        kwargs[param_name] = self._context
-                        break
-                except TypeError:
-                    pass
+                for ctx in self._context:
+                    try:
+                        if isinstance(ctx, hint):
+                            kwargs[param_name] = ctx
+                            break
+                    except TypeError:
+                        pass
         return kwargs
 
     async def register_mcp_server(self, server: MCPServer) -> None:

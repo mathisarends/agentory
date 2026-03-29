@@ -38,7 +38,10 @@ class Agent[T]:
         self.llm = llm
         self._instructions = instructions
         self.tools = tools or Tools()
-        self.tools.set_context(context)
+        if context is not None:
+            self.tools.set_context(context) if not isinstance(
+                context, (list, tuple)
+            ) else self.tools.set_context(*context)
 
         self._mcp_servers = mcp_servers or []
         self._skills = skills or []

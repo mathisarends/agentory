@@ -19,6 +19,11 @@ class _FakeContext:
         self.value = value
 
 
+class _AnotherService:
+    def __init__(self, name: str) -> None:
+        self.name = name
+
+
 class TestToolsRegisterAndGet:
     def test_register_via_action_decorator(self) -> None:
         tools = Tools()
@@ -78,7 +83,7 @@ class TestToolsExecute:
 
 class TestToolsContext:
     @pytest.mark.asyncio
-    async def test_context_forwarded_to_tool(self) -> None:
+    async def test_single_context_forwarded_to_tool(self) -> None:
         tools = Tools()
 
         @tools.action(description="uses context")
@@ -88,6 +93,42 @@ class TestToolsContext:
         tools.set_context(_FakeContext("my_context"))
         result = await tools.execute("ctx_tool", {"x": "val"})
         assert result == "val:my_context"
+
+    @pytest.mark.asyncio
+    async def test_multiple_contexts_injected(self) -> None:
+        tools = Tools()
+
+        @tools.action(description="needs both")
+        def multi(x: str, ctx: _FakeContext = None, svc: _AnotherService = None) -> str:
+            return f"{x}:{ctx.value}:{svc.name}"
+
+        tools.set_context(_FakeContext("fc"), _AnotherService("as"))
+        result = await tools.execute("multi", {"x": "hi"})
+        assert result == "hi:fc:as"
+
+    @pytest.mark.asyncio
+    async def test_tool_only_gets_matching_context(self) -> None:
+        tools = Tools()
+
+        @tools.action(description="only needs one")
+        def single(x: str, svc: _AnotherService = None) -> str:
+            return f"{x}:{svc.name}"
+
+        tools.set_context(_FakeContext("ignored"), _AnotherService("used"))
+        result = await tools.execute("single", {"x": "hi"})
+        assert result == "hi:used"
+
+    @pytest.mark.asyncio
+    async def test_no_context_params_unaffected(self) -> None:
+        tools = Tools()
+
+        @tools.action(description="plain tool")
+        def plain(x: str) -> str:
+            return f"plain:{x}"
+
+        tools.set_context(_FakeContext("ctx"))
+        result = await tools.execute("plain", {"x": "a"})
+        assert result == "plain:a"
 
 
 class TestToolsSchema:
