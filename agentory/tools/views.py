@@ -2,6 +2,8 @@ import inspect
 from collections.abc import Callable
 from typing import Any
 
+from pydantic import BaseModel, ConfigDict
+
 from agentory.tools.schema_builder import ToolSchemaBuilder
 
 
@@ -75,3 +77,9 @@ class Tool:
 
     def __hash__(self) -> int:
         return hash(self.name)
+
+
+class SpecialActionParameters(BaseModel):
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    context: Any

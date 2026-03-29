@@ -66,7 +66,33 @@ Agent(
 
 The main agent class. Call `agent.run(task)` to get an `AsyncIterator[StreamEvent]` that yields either plain `str` chunks or `ToolCallEvent` objects.
 
-`context` is an arbitrary value injected into every tool function that declares a `context` parameter.
+`context` is an arbitrary value (or tuple/list of values) injected into every tool function that declares a matching parameter type. Parameters with non-JSON types (custom classes) are automatically detected and filled from the context.
+
+```python
+from agentory import Agent, Tools
+
+class SpotifyClient: ...
+class UnsplashClient: ...
+
+tools = Tools()
+
+@tools.action("Search tracks on Spotify.")
+async def search_tracks(spotify: SpotifyClient, query: str) -> str:
+    ...
+
+@tools.action("Search photos on Unsplash.")
+async def search_photos(unsplash: UnsplashClient, query: str) -> str:
+    ...
+
+agent = Agent(
+    instructions="...",
+    llm=llm,
+    tools=tools,
+    context=(SpotifyClient(), UnsplashClient()),
+)
+```
+
+Each tool only receives the context objects whose types match its parameter annotations. Primitive-typed parameters (`str`, `int`, `bool`, `float`, `list`, `dict`) are treated as normal LLM-provided arguments.
 
 ### `Tools`
 
