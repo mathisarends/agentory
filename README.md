@@ -22,7 +22,7 @@ Requires Python 3.12+.
 
 ```python
 import asyncio
-from llmify import ChatModel
+from llmify import ChatOpenAI
 from agentory import Agent, Tools, ToolCallEvent
 
 tools = Tools()
@@ -33,7 +33,7 @@ def get_time() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 async def main():
-    llm = ChatModel.create("openai/gpt-4o-mini")
+    llm = ChatOpenAI(model="gpt-5.4-mini")
     agent = Agent(
         instructions="You are a helpful assistant.",
         llm=llm,
@@ -55,7 +55,7 @@ asyncio.run(main())
 ```python
 Agent(
     instructions: str,
-    llm: ChatModel,
+    llm: ChatOpenAI | ChatAzureOpenAI | ChatAnthropic,
     tools: Tools | None = None,
     mcp_servers: list[MCPServer] | None = None,
     skills: list[Skill] | None = None,
