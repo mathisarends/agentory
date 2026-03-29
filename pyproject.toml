@@ -1,17 +1,28 @@
 [project]
 name = "agentory"
 version = "0.1.0"
-description = "Add your description here"
+description = "A lightweight Python library for building tool-calling agents"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "py-llmify>=0.3.0",
 ]
 
+[project.optional-dependencies]
+openai = ["py-llmify[openai]>=0.3.0"]
+anthropic = ["py-llmify[anthropic]>=0.3.0"]
+all = ["py-llmify[all]>=0.3.0"]
+
 [dependency-groups]
 dev = [
+    "py-llmify[all]>=0.3.0",
     "pytest>=8.4.1,<9",
     "pytest-asyncio>=1.1.0,<2",
     "pytest-mock>=3.14.1,<4",
     "pre-commit>=4.3.0",
+    "python-dotenv>=1.0.0",
 ]
+
+[tool.pytest.ini_options]
+asyncio_mode = "strict"
+pythonpath = ["."]

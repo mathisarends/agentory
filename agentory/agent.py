@@ -14,12 +14,12 @@ from llmify.messages import (
     UserMessage,
 )
 
-from agentry.skills import Skill
-from agentry.tools.tools import Tools
-from agentry.views import StreamEvent, ToolCallEvent
+from agentory.skills import Skill
+from agentory.tools.tools import Tools
+from agentory.views import StreamEvent, ToolCallEvent
 
 if TYPE_CHECKING:
-    from agentry.mcp.server import MCPServer
+    from agentory.mcp.server import MCPServer
 
 
 logger = logging.getLogger(__name__)
@@ -53,6 +53,11 @@ class Agent[T]:
             return self._instructions
         skills_block = "\n\n".join(skill.render() for skill in self._skills)
         return f"{self._instructions}\n\n<skills>\n{skills_block}\n</skills>"
+    
+    async def __aenter__(self) -> Agent[T]:
+        await self._connect_mcp_servers()
+        return self
+        
     async def __aexit__(self, *_) -> None:
         await self._cleanup_mcp_servers()
 

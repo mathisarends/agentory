@@ -4,10 +4,10 @@ import logging
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
-from agentry.tools.views import Tool
+from agentory.tools.views import Tool
 
 if TYPE_CHECKING:
-    from agentry.mcp.server import MCPServer
+    from agentory.mcp.server import MCPServer
 
 logger = logging.getLogger(__name__)
 

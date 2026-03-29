@@ -2,12 +2,14 @@ from abc import ABC, abstractmethod
 import asyncio
 import json
 import logging
+from pathlib import Path
+import sys
 from typing import Annotated, Any
 
 from pydantic import BaseModel
 from typing_extensions import Doc
 
-from agentry.mcp.schemas import (
+from agentory.mcp.schemas import (
     ClientInfo,
     InitializeParams, 
     JsonRpcNotification, 
@@ -16,7 +18,7 @@ from agentry.mcp.schemas import (
     MCPToolDefinition, 
     MCPToolsListResult
 )
-from agentry.tools.views import Tool
+from agentory.tools.views import Tool
 
 
 logger = logging.getLogger(__name__)
@@ -99,16 +101,15 @@ class MCPServerStdio(MCPServer):
         self._tools_cache: list[Tool] | None = None
 
     async def connect(self) -> None:
-        """Spawn the server process and complete the MCP handshake.
-
-        If a process is already running, it is terminated first.
-        Sends `initialize` and `notifications/initialized` to complete the protocol handshake.
-        """
         if self._process is not None:
             await self.cleanup()
 
+        command = self._command
+        if sys.platform == "win32" and not Path(command).suffix:
+            command = command + ".cmd"
+
         self._process = await asyncio.create_subprocess_exec(
-            self._command,
+            command,
             *self._args,
             stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE,

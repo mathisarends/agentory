@@ -2,7 +2,7 @@ import inspect
 from collections.abc import Callable
 from typing import Any
 
-from agentry.tools.schema_builder import ToolSchemaBuilder
+from agentory.tools.schema_builder import ToolSchemaBuilder
 
 
 class Tool:
@@ -25,25 +25,21 @@ class Tool:
 
     def _validate_status_keys(self) -> None:
         params = set(inspect.signature(self.fn).parameters.keys())
+        accessed: set[str] = set()
 
-        class _TrackingDict(dict):
-            def __init__(self) -> None:
-                super().__init__()
-                self.accessed: set[str] = set()
-
-            def get(self, key: str, default: Any = None) -> Any:
-                self.accessed.add(key)
-                return default
-
-            def __getitem__(self, key: str) -> Any:
-                self.accessed.add(key)
+        class _Tracker:
+            def __getitem__(self, key: str) -> str:
+                accessed.add(key)
                 return ""
 
-        tracker = _TrackingDict()
+            def get(self, key: str, default: Any = None) -> Any:
+                accessed.add(key)
+                return default
+
         assert callable(self.status)
-        self.status(tracker)
-        unknown = tracker.accessed - params
-        if unknown:
+        self.status(_Tracker())
+
+        if unknown := accessed - params:
             raise ValueError(
                 f"Tool '{self.name}' status references unknown args: {unknown}. "
                 f"Available: {params}"
