@@ -2,16 +2,28 @@ import collections.abc
 import inspect
 import types
 from collections.abc import Callable
-from typing import Annotated, Any, ClassVar, Union, get_args, get_origin, get_type_hints
+from enum import Enum
+from typing import (
+    Annotated,
+    Any,
+    ClassVar,
+    Literal,
+    Union,
+    get_args,
+    get_origin,
+    get_type_hints,
+)
 
-from agentory.tools.inject import Inject
+from pydantic import BaseModel
+
+from agentory.tools.inject import _InjectMarker
 
 
 def is_injectable(hint: Any) -> bool:
-    """Return *True* if *hint* is marked with ``Annotated[..., Inject]``."""
+    """Return *True* if *hint* is ``Inject[T]`` i.e. ``Annotated[T, _InjectMarker]``."""
     if get_origin(hint) is not Annotated:
         return False
-    return Inject in get_args(hint)
+    return any(isinstance(a, _InjectMarker) for a in get_args(hint))
 
 
 class ToolSchemaBuilder:
@@ -30,10 +42,18 @@ class ToolSchemaBuilder:
         collections.abc.Collection,
     )
 
-    def __init__(self, function: Callable) -> None:
+    def __init__(
+        self,
+        function: Callable,
+        param_model: type[BaseModel] | None = None,
+    ) -> None:
         self._function = function
+        self._param_model = param_model
 
     def build(self) -> dict:
+        if self._param_model is not None and self._is_pydantic_model(self._param_model):
+            return self._build_from_pydantic_model(self._param_model)
+
         sig = inspect.signature(self._function)
         hints = get_type_hints(self._function, include_extras=True)
 
@@ -85,6 +105,12 @@ class ToolSchemaBuilder:
             return self._to_json_property(unwrapped, description)
 
         origin = get_origin(python_type)
+        if origin is Literal:
+            return {
+                **prop,
+                "type": "string",
+                "enum": [str(v) for v in get_args(python_type)],
+            }
         if origin is list or origin in self._COLLECTION_TYPES:
             args = get_args(python_type)
             item_type = args[0] if args else str
@@ -92,5 +118,57 @@ class ToolSchemaBuilder:
         if origin is dict:
             return {**prop, "type": "object"}
 
+        if self._is_pydantic_model(python_type):
+            return self._build_model_property(python_type, description)
+
+        if self._is_enum(python_type):
+            return {
+                **prop,
+                "type": "string",
+                "enum": [member.value for member in python_type],
+            }
+
         json_type = self._PRIMITIVE_TYPES.get(python_type, "string")
         return {**prop, "type": json_type}
+
+    def _build_from_pydantic_model(self, model: type[BaseModel]) -> dict:
+        properties: dict[str, dict[str, Any]] = {}
+        required: list[str] = []
+
+        for field_name, field_info in model.model_fields.items():
+            properties[field_name] = self._to_json_property(
+                field_info.annotation,
+                field_info.description,
+            )
+            if not field_info.is_required() and field_info.default is not None:
+                properties[field_name]["default"] = field_info.default
+            if field_info.is_required():
+                required.append(field_name)
+
+        return {
+            "type": "object",
+            "properties": properties,
+            "required": required,
+        }
+
+    def _build_model_property(
+        self, model: type[BaseModel], description: str | None
+    ) -> dict[str, Any]:
+        schema = self._build_from_pydantic_model(model)
+        if description:
+            schema["description"] = description
+        return schema
+
+    @staticmethod
+    def _is_pydantic_model(model: Any) -> bool:
+        try:
+            return isinstance(model, type) and issubclass(model, BaseModel)
+        except TypeError:
+            return False
+
+    @staticmethod
+    def _is_enum(model: Any) -> bool:
+        try:
+            return isinstance(model, type) and issubclass(model, Enum)
+        except TypeError:
+            return False

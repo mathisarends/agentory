@@ -60,10 +60,13 @@ Agent(
     mcp_servers: list[MCPServer] | None = None,
     skills: list[Skill] | None = None,
     max_iterations: int = 10,
+    history_manager: HistoryManager | None = None,
 )
 ```
 
 The main agent class. Call `agent.run(task)` to get an `AsyncIterator[StreamEvent]` that yields either plain `str` chunks or `ToolCallEvent` objects.
+
+`history_manager` is an optional hook for custom history storage/compaction strategies. The default manager is in-memory and preserves current behavior.
 
 MCP servers are connected automatically on the first `run()` call. Call `await agent.close()` when done to clean up MCP connections. The async context manager (`async with`) is also supported as an alternative.
 
@@ -89,8 +92,26 @@ async def fetch(url: str) -> str:
 - **`description`** – shown to the LLM in the tool schema.
 - **`name`** – overrides the function name.
 - **`status`** – a string or callable producing a human-readable status shown during streaming.
+- **`params`** – optional Pydantic model used for argument validation/schema generation.
+- **`result_adapter`** – optional adapter to shape successful/failed tool outputs.
 
 Type hints on parameters are automatically converted to JSON Schema. Use `Annotated[str, "description"]` to attach per-parameter descriptions.
+
+When `params` is provided, tool functions can receive a single typed model parameter:
+
+```python
+from pydantic import BaseModel
+
+
+class SearchParams(BaseModel):
+    query: str
+    limit: int = 5
+
+
+@tools.action("Search docs.", params=SearchParams, status=lambda p: f"Searching {p.query}")
+def search(params: SearchParams) -> str:
+    ...
+```
 
 #### Dependency Injection with `Inject`
 
@@ -125,6 +146,15 @@ tools.provide(spotify_client).provide(unsplash_client)
 ```
 
 Use `tools.clear_dependencies()` to reset all registered dependencies.
+
+For explicit context management, you can set a `ToolContext` object directly:
+
+```python
+from agentory import ToolContext
+
+context = ToolContext().provide(spotify_client, unsplash_client)
+tools.set_context(context)
+```
 
 ### `Tool`
 

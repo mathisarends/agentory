@@ -1,4 +1,5 @@
 import pytest
+from pydantic import BaseModel
 
 from agentory.tools.views import Tool
 
@@ -9,6 +10,10 @@ def _sync_fn(name: str) -> str:
 
 async def _async_fn(name: str) -> str:
     return f"async hello {name}"
+
+
+class _Params(BaseModel):
+    name: str
 
 
 class TestToolExecute:
@@ -77,6 +82,16 @@ class TestToolRenderStatus:
         tool = Tool(name="t", description="d", fn=_sync_fn)
         assert tool.render_status({}) is None
 
+    def test_callable_status_with_param_model(self) -> None:
+        tool = Tool(
+            name="t",
+            description="d",
+            fn=lambda params: params.name,
+            param_model=_Params,
+            status=lambda params: f"Greeting {params.name}",
+        )
+        assert tool.render_status({"name": "Alice"}) == "Greeting Alice"
+
 
 class TestToolStatusValidation:
     def test_invalid_status_key_raises(self) -> None:
@@ -86,6 +101,16 @@ class TestToolStatusValidation:
                 description="d",
                 fn=_sync_fn,
                 status=lambda args: args["nonexistent"],
+            )
+
+    def test_invalid_params_model_status_field_raises(self) -> None:
+        with pytest.raises(ValueError, match="unknown params-model field"):
+            Tool(
+                name="t",
+                description="d",
+                fn=lambda params: params.name,
+                param_model=_Params,
+                status=lambda params: params.nonexistent,
             )
 
 

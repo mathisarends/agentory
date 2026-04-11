@@ -2,7 +2,7 @@ import json
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from llmify.messages import Function, ToolCall
+from llmify.messages import Function, ToolCall, ToolResultMessage, UserMessage
 
 from agentory.agent import Agent
 from agentory.skills import Skill
@@ -22,6 +22,22 @@ def _make_tool_call(call_id: str, name: str, arguments: dict) -> ToolCall:
         id=call_id,
         function=Function(name=name, arguments=json.dumps(arguments)),
     )
+
+
+class _RecordingHistoryManager:
+    def __init__(self) -> None:
+        self.items: list = []
+        self.reset_calls = 0
+
+    def append(self, message) -> None:
+        self.items.append(message)
+
+    def messages(self):
+        return self.items
+
+    def reset(self, system_message) -> None:
+        self.reset_calls += 1
+        self.items = [system_message]
 
 
 class TestAgentInit:
@@ -123,6 +139,46 @@ class TestAgentRun:
             events.append(event)
 
         assert "Done" in events
+
+    @pytest.mark.asyncio
+    async def test_non_string_tool_result_is_serialized_for_history(self) -> None:
+        tools = Tools()
+
+        @tools.action(description="returns object")
+        def to_object(x: int) -> dict:
+            return {"value": x}
+
+        tool_call = _make_tool_call("c1", "to_object", {"x": 7})
+        llm = AsyncMock()
+        llm.invoke.side_effect = [
+            _make_llm_response(tool_calls=[tool_call]),
+            _make_llm_response(completion="ok"),
+        ]
+
+        agent = Agent(instructions="test", llm=llm, tools=tools)
+        async for _ in agent.run("run"):
+            pass
+
+        tool_messages = [m for m in agent._history if isinstance(m, ToolResultMessage)]
+        assert len(tool_messages) == 1
+        assert tool_messages[0].content == '{"value": 7}'
+
+    @pytest.mark.asyncio
+    async def test_agent_uses_custom_history_manager(self) -> None:
+        llm = AsyncMock()
+        llm.invoke.return_value = _make_llm_response(completion="Hello")
+        history_manager = _RecordingHistoryManager()
+
+        agent = Agent(
+            instructions="test",
+            llm=llm,
+            history_manager=history_manager,
+        )
+        async for _ in agent.run("Hi"):
+            pass
+
+        assert history_manager.reset_calls == 1
+        assert any(isinstance(msg, UserMessage) for msg in history_manager.items)
 
 
 class TestAgentReset:

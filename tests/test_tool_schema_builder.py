@@ -1,12 +1,19 @@
 import collections.abc
 from typing import Annotated
 
+from pydantic import BaseModel, Field
+
 from agentory.tools.inject import Inject
 from agentory.tools.schema_builder import ToolSchemaBuilder
 
 
 class SimpleModel:
     pass
+
+
+class SearchParams(BaseModel):
+    query: str = Field(description="search query")
+    limit: int = 10
 
 
 def _build(fn) -> dict:
@@ -142,7 +149,7 @@ class TestSkippedParams:
         assert "name" in schema["properties"]
 
     def test_inject_param_is_skipped(self) -> None:
-        def fn(svc: Annotated[SimpleModel, Inject], name: str) -> None: ...
+        def fn(svc: Inject[SimpleModel], name: str) -> None: ...
 
         schema = _build(fn)
         assert "svc" not in schema["properties"]
@@ -163,3 +170,15 @@ class TestSkippedParams:
         schema = _build(fn)
         assert "cls" not in schema["properties"]
         assert "name" in schema["properties"]
+
+
+class TestPydanticParamsModel:
+    def test_schema_built_from_param_model(self) -> None:
+        def fn(params: SearchParams) -> None: ...
+
+        schema = ToolSchemaBuilder(fn, param_model=SearchParams).build()
+        assert schema["type"] == "object"
+        assert schema["properties"]["query"]["type"] == "string"
+        assert schema["properties"]["query"]["description"] == "search query"
+        assert schema["properties"]["limit"]["type"] == "integer"
+        assert "query" in schema["required"]

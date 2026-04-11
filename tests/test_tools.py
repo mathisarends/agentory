@@ -1,8 +1,10 @@
-from typing import Annotated
+from typing import Any
 from unittest.mock import AsyncMock
 
 import pytest
+from pydantic import BaseModel
 
+from agentory.tools.context import ToolContext
 from agentory.tools.inject import Inject
 from agentory.tools.tools import Tools
 from agentory.tools.views import Tool
@@ -24,6 +26,18 @@ class _FakeContext:
 class _AnotherService:
     def __init__(self, name: str) -> None:
         self.name = name
+
+
+class _EchoParams(BaseModel):
+    text: str
+
+
+class _DictResultAdapter:
+    def on_success(self, *, tool: Tool, result: Any) -> dict[str, Any]:
+        return {"tool": tool.name, "ok": True, "result": result}
+
+    def on_error(self, *, tool: Tool, error: Exception) -> dict[str, Any]:
+        return {"tool": tool.name, "ok": False, "error": str(error)}
 
 
 class TestToolsRegisterAndGet:
@@ -82,6 +96,46 @@ class TestToolsExecute:
         assert "Error" in result
         assert "boom" in result
 
+    @pytest.mark.asyncio
+    async def test_execute_with_params_model(self) -> None:
+        tools = Tools()
+
+        @tools.action(description="echo model", params=_EchoParams)
+        def echo(params: _EchoParams) -> str:
+            return f"echo:{params.text}"
+
+        result = await tools.execute("echo", {"text": "hello"})
+        assert result == "echo:hello"
+
+    @pytest.mark.asyncio
+    async def test_execute_with_params_model_and_injected_dependency(self) -> None:
+        tools = Tools()
+
+        @tools.action(description="echo model", params=_EchoParams)
+        def echo(
+            params: _EchoParams,
+            svc: Inject[_AnotherService],
+        ) -> str:
+            return f"echo:{params.text}:{svc.name}"
+
+        tools.provide(_AnotherService("svc"))
+        result = await tools.execute("echo", {"text": "hello"})
+        assert result == "echo:hello:svc"
+
+    @pytest.mark.asyncio
+    async def test_execute_uses_custom_result_adapter(self) -> None:
+        tools = Tools()
+
+        @tools.action(
+            description="echo",
+            result_adapter=_DictResultAdapter(),
+        )
+        def echo(x: str) -> str:
+            return f"echo:{x}"
+
+        result = await tools.execute("echo", {"x": "hello"})
+        assert result == {"tool": "echo", "ok": True, "result": "echo:hello"}
+
 
 class TestToolsProvide:
     @pytest.mark.asyncio
@@ -89,7 +143,7 @@ class TestToolsProvide:
         tools = Tools()
 
         @tools.action(description="uses context")
-        def ctx_tool(x: str, ctx: Annotated[_FakeContext, Inject] = None) -> str:
+        def ctx_tool(x: str, ctx: Inject[_FakeContext] = None) -> str:
             return f"{x}:{ctx.value}"
 
         tools.provide(_FakeContext("my_context"))
@@ -103,8 +157,8 @@ class TestToolsProvide:
         @tools.action(description="needs both")
         def multi(
             x: str,
-            ctx: Annotated[_FakeContext, Inject] = None,
-            svc: Annotated[_AnotherService, Inject] = None,
+            ctx: Inject[_FakeContext] = None,
+            svc: Inject[_AnotherService] = None,
         ) -> str:
             return f"{x}:{ctx.value}:{svc.name}"
 
@@ -117,7 +171,7 @@ class TestToolsProvide:
         tools = Tools()
 
         @tools.action(description="only needs one")
-        def single(x: str, svc: Annotated[_AnotherService, Inject] = None) -> str:
+        def single(x: str, svc: Inject[_AnotherService] = None) -> str:
             return f"{x}:{svc.name}"
 
         tools.provide(_FakeContext("ignored"), _AnotherService("used"))
@@ -157,6 +211,15 @@ class TestToolsProvide:
         tools = Tools()
         result = tools.clear_dependencies()
         assert result is tools
+
+    def test_set_context_replaces_existing_context(self) -> None:
+        tools = Tools()
+        tools.provide(_FakeContext("a"))
+
+        new_context = ToolContext().provide(_FakeContext("b"))
+        tools.set_context(new_context)
+
+        assert tools._context.resolve(_FakeContext).value == "b"
 
     @pytest.mark.asyncio
     async def test_unannotated_custom_type_not_injected(self) -> None:

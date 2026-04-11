@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import logging
 from collections.abc import AsyncIterator
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from llmify import ChatModel
 from llmify.messages import (
@@ -12,7 +12,9 @@ from llmify.messages import (
     ToolResultMessage,
     UserMessage,
 )
+from pydantic import BaseModel
 
+from agentory.history import HistoryManager, InMemoryHistoryManager
 from agentory.skills import Skill
 from agentory.tools import Tools
 from agentory.views import StreamEvent, ToolCallEvent
@@ -24,7 +26,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-class Agent:
+class Agent[Context]:
     def __init__(
         self,
         instructions: str,
@@ -33,6 +35,8 @@ class Agent:
         mcp_servers: list[MCPServer] | None = None,
         skills: list[Skill] | None = None,
         max_iterations: int = 10,
+        context: Context | None = None,
+        history_manager: HistoryManager | None = None,
     ) -> None:
         self.llm = llm
         self._instructions = instructions
@@ -40,9 +44,13 @@ class Agent:
         self._mcp_servers = mcp_servers or []
         self._skills = skills or []
         self._max_iterations = max_iterations
+        self._context = context
+        self._history_manager = history_manager or InMemoryHistoryManager()
+
         self._mcp_connected = False
 
-        self._history = [SystemMessage(content=self._build_system_prompt())]
+        self._history_manager.reset(SystemMessage(content=self._build_system_prompt()))
+        self._history = self._history_manager.messages()
 
     def _build_system_prompt(self) -> str:
         if not self._skills:
@@ -59,7 +67,7 @@ class Agent:
 
     async def run(self, task: str) -> AsyncIterator[StreamEvent]:
         await self._connect_mcp_servers()
-        self._history.append(UserMessage(content=task))
+        self._history_manager.append(UserMessage(content=task))
         schema = self.tools.to_schema() or None
         iterations = 0
 
@@ -69,15 +77,17 @@ class Agent:
                 return
             iterations += 1
 
-            response = await self.llm.invoke(self._history, tools=schema)
+            response = await self.llm.invoke(
+                list(self._history_manager.messages()), tools=schema
+            )
 
             if not response.tool_calls:
                 content = response.completion or ""
-                self._history.append(AssistantMessage(content=content))
+                self._history_manager.append(AssistantMessage(content=content))
                 yield content
                 return
 
-            self._history.append(
+            self._history_manager.append(
                 AssistantMessage(content=None, tool_calls=response.tool_calls)
             )
 
@@ -93,8 +103,11 @@ class Agent:
                 except Exception as e:
                     result = json.dumps({"error": str(e), "tool": call.function.name})
 
-                self._history.append(
-                    ToolResultMessage(tool_call_id=call.id, content=result)
+                self._history_manager.append(
+                    ToolResultMessage(
+                        tool_call_id=call.id,
+                        content=self._serialize_tool_result(result),
+                    )
                 )
 
     async def _connect_mcp_servers(self) -> None:
@@ -116,4 +129,18 @@ class Agent:
         await self._cleanup_mcp_servers()
 
     def reset(self) -> None:
-        self._history = [SystemMessage(content=self._build_system_prompt())]
+        self._history_manager.reset(SystemMessage(content=self._build_system_prompt()))
+        self._history = self._history_manager.messages()
+
+    @staticmethod
+    def _serialize_tool_result(result: Any) -> str:
+        if isinstance(result, str):
+            return result
+        if isinstance(result, BaseModel):
+            return result.model_dump_json()
+        if result is None:
+            return ""
+        try:
+            return json.dumps(result)
+        except TypeError:
+            return str(result)
