@@ -69,11 +69,10 @@ class TestAgentRun:
         llm.invoke.return_value = _make_llm_response(completion="Hello!")
 
         agent = Agent(instructions="test", llm=llm)
-        events: list = []
-        async for event in agent.run("Hi"):
-            events.append(event)
+        result = await agent.run("Hi")
 
-        assert any(isinstance(e, AgentResult) and e.output == "Hello!" for e in events)
+        assert isinstance(result, AgentResult)
+        assert result.output == "Hello!"
 
     @pytest.mark.asyncio
     async def test_tool_call_flow(self) -> None:
@@ -92,7 +91,7 @@ class TestAgentRun:
 
         agent = Agent(instructions="test", llm=llm, tools=tools)
         events: list = []
-        async for event in agent.run("add 1+2"):
+        async for event in agent.stream("add 1+2"):
             events.append(event)
 
         assert any(
@@ -126,7 +125,7 @@ class TestAgentRun:
 
         agent = Agent(instructions="test", llm=llm, tools=tools)
         events: list = []
-        async for event in agent.run("echo hi"):
+        async for event in agent.stream("echo hi"):
             events.append(event)
 
         assert any(
@@ -150,7 +149,7 @@ class TestAgentRun:
 
         agent = Agent(instructions="test", llm=llm, tools=tools, max_iterations=2)
         events: list = []
-        async for event in agent.run("loop"):
+        async for event in agent.stream("loop"):
             events.append(event)
 
         assert any(
@@ -174,11 +173,9 @@ class TestAgentRun:
         ]
 
         agent = Agent(instructions="test", llm=llm, tools=tools)
-        events: list = []
-        async for event in agent.run("do it"):
-            events.append(event)
+        result = await agent.run("do it")
 
-        assert any(isinstance(e, AgentResult) and e.output == "Done" for e in events)
+        assert result.output == "Done"
 
     @pytest.mark.asyncio
     async def test_non_string_tool_result_is_serialized_for_history(self) -> None:
@@ -196,8 +193,7 @@ class TestAgentRun:
         ]
 
         agent = Agent(instructions="test", llm=llm, tools=tools)
-        async for _ in agent.run("run"):
-            pass
+        await agent.run("run")
 
         tool_messages = [
             m
@@ -218,8 +214,7 @@ class TestAgentRun:
             llm=llm,
             message_store=history_manager,
         )
-        async for _ in agent.run("Hi"):
-            pass
+        await agent.run("Hi")
 
         assert history_manager.reset_calls == 1
         assert any(isinstance(msg, UserMessage) for msg in history_manager.items)
@@ -247,8 +242,7 @@ class TestAgentMCP:
         mock_server.list_tools.return_value = []
 
         agent = Agent(instructions="test", llm=llm, mcp_servers=[mock_server])
-        async for _ in agent.run("Hi"):
-            pass
+        await agent.run("Hi")
 
         mock_server.connect.assert_awaited_once()
 
@@ -260,10 +254,8 @@ class TestAgentMCP:
         mock_server.list_tools.return_value = []
 
         agent = Agent(instructions="test", llm=llm, mcp_servers=[mock_server])
-        async for _ in agent.run("Hi"):
-            pass
-        async for _ in agent.run("Hi again"):
-            pass
+        await agent.run("Hi")
+        await agent.run("Hi again")
 
         mock_server.connect.assert_awaited_once()
 
@@ -275,8 +267,7 @@ class TestAgentMCP:
         mock_server.list_tools.return_value = []
 
         agent = Agent(instructions="test", llm=llm, mcp_servers=[mock_server])
-        async for _ in agent.run("Hi"):
-            pass
+        await agent.run("Hi")
         await agent.close()
 
         mock_server.cleanup.assert_awaited_once()

@@ -52,7 +52,9 @@ async def main() -> None:
         context=ctx,
     )
 
-    async for event in agent.run("Save a note saying 'Buy milk', then list all notes."):
+    async for event in agent.stream(
+        "Save a note saying 'Buy milk', then list all notes."
+    ):
         if isinstance(event, ToolCallEvent):
             print(f"[tool] {event.tool_name}: {event.status}")
         elif isinstance(event, AgentResult):

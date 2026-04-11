@@ -89,7 +89,7 @@ async def main():
         injectables=[NotionClient()],
     )
 
-    async for event in agent.run(
+    async for event in agent.stream(
         "Find pages about meetings and summarize what's in the first one"
     ):
         print(event)

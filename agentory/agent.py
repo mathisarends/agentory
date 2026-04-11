@@ -17,7 +17,6 @@ from agentory.skills import Skill
 from agentory.tools import ToolContext, Tools
 from agentory.tools.views import DoneParams
 from agentory.views import AgentResult, StreamEvent, ToolCallEvent
-
 from agentory.mcp.server import MCPServer
 
 logger = logging.getLogger(__name__)
@@ -46,11 +45,9 @@ class Agent[Context]:
         self._context = context
         self._message_store = message_store or InMemoryMessageStore()
         self._injectables = tuple(injectables or ())
-
-        self._wire_tool_context()
-
         self._mcp_connected = False
 
+        self._wire_tool_context()
         self._message_store.reset(SystemMessage(content=self._build_system_prompt()))
 
     def _wire_tool_context(self) -> None:
@@ -66,14 +63,25 @@ class Agent[Context]:
         skills_block = "\n\n".join(skill.render() for skill in self._skills)
         return f"{self._instructions}\n\n<skills>\n{skills_block}\n</skills>"
 
-    async def __aenter__(self) -> Self:
+    async def prewarm(self) -> Self:
+        """Eagerly connect MCP servers. Optional – stream/run connect lazily if not called."""
         await self._connect_mcp_servers()
         return self
 
-    async def __aexit__(self, *_) -> None:
-        await self._cleanup_mcp_servers()
+    async def __aenter__(self) -> Self:
+        await self.prewarm()
+        return self
 
-    async def run(self, task: str) -> AsyncGenerator[StreamEvent]:
+    async def __aexit__(self, *_) -> None:
+        await self.close()
+
+    async def run(self, task: str) -> AgentResult:
+        async for event in self.stream(task):
+            if isinstance(event, AgentResult):
+                return event
+        raise RuntimeError("Agent stream ended without AgentResult")
+
+    async def stream(self, task: str) -> AsyncGenerator[StreamEvent, None]:
         await self._connect_mcp_servers()
         self._message_store.append(UserMessage(content=task))
         schema = self.tools.to_schema() or None
@@ -133,15 +141,12 @@ class Agent[Context]:
             await self.tools.register_mcp_server(server)
         self._mcp_connected = True
 
-    async def _cleanup_mcp_servers(self) -> None:
+    async def close(self) -> None:
         if not self._mcp_connected:
             return
         for server in self._mcp_servers:
             await server.cleanup()
         self._mcp_connected = False
-
-    async def close(self) -> None:
-        await self._cleanup_mcp_servers()
 
     def reset(self) -> None:
         self._message_store.reset(SystemMessage(content=self._build_system_prompt()))

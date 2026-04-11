@@ -41,7 +41,7 @@ async def main() -> None:
         tools=tools,
     )
 
-    async for event in agent.run("What is (3 + 4) * 12?"):
+    async for event in agent.stream("What is (3 + 4) * 12?"):
         if isinstance(event, ToolCallEvent):
             print(f"[tool] {event.tool_name}: {event.status}")
         elif isinstance(event, AgentResult):

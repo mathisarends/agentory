@@ -40,7 +40,7 @@ async def main():
         llm=llm,
         tools=tools,
     )
-    async for event in agent.run("What time is it?"):
+    async for event in agent.stream("What time is it?"):
         if isinstance(event, ToolCallEvent):
             print(f"[tool] {event.tool_name}: {event.status}")
         elif isinstance(event, AgentResult):
@@ -68,7 +68,10 @@ Agent(
 )
 ```
 
-The main agent class. Call `agent.run(task)` to get an `AsyncIterator[StreamEvent]` that yields `ToolCallEvent` and `AgentResult` objects.
+The main agent class provides two execution methods:
+
+- `await agent.run(task)` returns a final `AgentResult`.
+- `agent.stream(task)` returns an `AsyncIterator[StreamEvent]` yielding `ToolCallEvent` and the final `AgentResult`.
 
 - `context` is an optional shared dependency object injected into tools via `Inject[YourContextType]`.
 - `message_store` is an optional custom message store implementation.
@@ -79,7 +82,7 @@ MCP servers are connected automatically on the first `run()` call. Call `await a
 
 ```python
 agent = Agent(instructions="...", llm=llm, mcp_servers=[server])
-async for event in agent.run("Do something"):
+async for event in agent.stream("Do something"):
     print(event)
 await agent.close()
 ```
@@ -209,7 +212,7 @@ server = MCPServerStdio(
 )
 
 agent = Agent(instructions="...", llm=llm, mcp_servers=[server])
-async for event in agent.run("List files in /tmp"):
+async for event in agent.stream("List files in /tmp"):
     print(event)
 await agent.close()
 ```

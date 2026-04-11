@@ -30,7 +30,7 @@ async def main() -> None:
         mcp_servers=[server],
     )
 
-    async for event in agent.run(f"List the files in {WORK_DIR}."):
+    async for event in agent.stream(f"List the files in {WORK_DIR}."):
         if isinstance(event, ToolCallEvent):
             print(f"[tool] {event.tool_name}: {event.status or ''}")
         elif isinstance(event, AgentResult):

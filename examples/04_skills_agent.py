@@ -50,7 +50,9 @@ async def main() -> None:
         skills=[RESEARCH_SKILL],
     )
 
-    async for event in agent.run("Research the history of the Model Context Protocol."):
+    async for event in agent.stream(
+        "Research the history of the Model Context Protocol."
+    ):
         if isinstance(event, ToolCallEvent):
             print(f"[tool] {event.tool_name}: {event.status}")
         elif isinstance(event, AgentResult):

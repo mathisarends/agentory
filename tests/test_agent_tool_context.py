@@ -91,8 +91,7 @@ class TestAgentToolContextWiring:
             injectables=[_Service("svc")],
         )
 
-        async for _ in agent.run("run"):
-            pass
+        await agent.run("run")
 
         tool_messages = [
             msg
