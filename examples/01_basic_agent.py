@@ -3,8 +3,10 @@
 import asyncio
 
 from llmify import ChatOpenAI
+from pydantic import BaseModel
 
 from agentory import Agent, ToolCallEvent, Tools
+from agentory.views import AgentResult
 from dotenv import load_dotenv
 
 load_dotenv(override=True)
@@ -12,12 +14,18 @@ load_dotenv(override=True)
 tools = Tools()
 
 
+class AddParams(BaseModel):
+    x: float
+    y: float
+
+
 @tools.action(
     description="Add two numbers together",
-    status=lambda a: f"Adding {a['x']} + {a['y']}",
+    params=AddParams,
+    status_label=lambda p: f"Adding {p.x} + {p.y}",
 )
-def add(x: float, y: float) -> float:
-    return x + y
+def add(params: AddParams) -> float:
+    return params.x + params.y
 
 
 @tools.action(description="Multiply two numbers together")
@@ -36,8 +44,8 @@ async def main() -> None:
     async for event in agent.run("What is (3 + 4) * 12?"):
         if isinstance(event, ToolCallEvent):
             print(f"[tool] {event.tool_name}: {event.status}")
-        else:
-            print(event)
+        elif isinstance(event, AgentResult):
+            print(event.output)
 
 
 if __name__ == "__main__":

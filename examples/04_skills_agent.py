@@ -3,8 +3,10 @@
 import asyncio
 
 from llmify import ChatOpenAI
+from pydantic import BaseModel
 
 from agentory import Agent, Skill, ToolCallEvent, Tools
+from agentory.views import AgentResult
 
 from dotenv import load_dotenv
 
@@ -13,13 +15,18 @@ load_dotenv(override=True)
 tools = Tools()
 
 
+class WebSearchParams(BaseModel):
+    query: str
+
+
 @tools.action(
     description="Search the web for a query",
-    status=lambda a: f"Searching: {a['query']!r}",
+    params=WebSearchParams,
+    status_label=lambda p: f"Searching: {p.query!r}",
 )
-async def web_search(query: str) -> str:
+async def web_search(params: WebSearchParams) -> str:
     # Stub — replace with a real search call.
-    return f"[search results for '{query}']"
+    return f"[search results for '{params.query}']"
 
 
 RESEARCH_SKILL = Skill(
@@ -46,8 +53,8 @@ async def main() -> None:
     async for event in agent.run("Research the history of the Model Context Protocol."):
         if isinstance(event, ToolCallEvent):
             print(f"[tool] {event.tool_name}: {event.status}")
-        else:
-            print(event)
+        elif isinstance(event, AgentResult):
+            print(event.output)
 
 
 if __name__ == "__main__":

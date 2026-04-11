@@ -24,6 +24,7 @@ Requires Python 3.12+.
 import asyncio
 from llmify import ChatOpenAI
 from agentory import Agent, Tools, ToolCallEvent
+from agentory.views import AgentResult
 
 tools = Tools()
 
@@ -42,8 +43,8 @@ async def main():
     async for event in agent.run("What time is it?"):
         if isinstance(event, ToolCallEvent):
             print(f"[tool] {event.tool_name}: {event.status}")
-        else:
-            print(event)
+        elif isinstance(event, AgentResult):
+            print(event.output)
 
 asyncio.run(main())
 ```
@@ -60,13 +61,19 @@ Agent(
     mcp_servers: list[MCPServer] | None = None,
     skills: list[Skill] | None = None,
     max_iterations: int = 10,
-    history_manager: HistoryManager | None = None,
+    context: Any | None = None,
+    message_store: MessageStore | None = None,
+    injectables: tuple[Any, ...] | list[Any] | None = None,
+    use_done_tool: bool = False,
 )
 ```
 
-The main agent class. Call `agent.run(task)` to get an `AsyncIterator[StreamEvent]` that yields either plain `str` chunks or `ToolCallEvent` objects.
+The main agent class. Call `agent.run(task)` to get an `AsyncIterator[StreamEvent]` that yields `ToolCallEvent` and `AgentResult` objects.
 
-`history_manager` is an optional hook for custom history storage/compaction strategies. The default manager is in-memory and preserves current behavior.
+- `context` is an optional shared dependency object injected into tools via `Inject[YourContextType]`.
+- `message_store` is an optional custom message store implementation.
+- `injectables` lets you register additional dependencies for `Inject[...]` resolution.
+- `use_done_tool` registers a built-in `done` tool that agents can call to terminate explicitly.
 
 MCP servers are connected automatically on the first `run()` call. Call `await agent.close()` when done to clean up MCP connections. The async context manager (`async with`) is also supported as an alternative.
 
@@ -122,7 +129,6 @@ def search(params: SearchParams) -> str:
 Use `Inject[...]` to mark parameters for dependency injection. The `Agent` wires tool context automatically and always provides the active message store as injectable. You can add your own dependencies as flat `injectables=[...]` on `Agent`.
 
 ```python
-from typing import Annotated
 from agentory import Agent, Inject, Tools
 from agentory.history import MessageStore
 
@@ -132,11 +138,11 @@ class UnsplashClient: ...
 tools = Tools()
 
 @tools.action("Search tracks on Spotify.")
-async def search_tracks(spotify: Annotated[SpotifyClient, Inject], query: str) -> str:
+async def search_tracks(spotify: Inject[SpotifyClient], query: str) -> str:
     ...
 
 @tools.action("Search photos on Unsplash.")
-async def search_photos(unsplash: Annotated[UnsplashClient, Inject], query: str) -> str:
+async def search_photos(unsplash: Inject[UnsplashClient], query: str) -> str:
     ...
 
 @tools.action("Count stored messages.")
@@ -220,14 +226,20 @@ await agent.close()
 ### `StreamEvent`
 
 ```python
-type StreamEvent = str | ToolCallEvent
+type StreamEvent = ToolCallEvent | AgentResult
 ```
 
-Events yielded by `agent.run()`. A plain `str` is a text chunk from the LLM; a `ToolCallEvent` signals that a tool is being called.
+Events yielded by `agent.run()`. A `ToolCallEvent` signals that a tool is being called. `AgentResult` is emitted when the run finishes.
 
 ```python
 @dataclass
 class ToolCallEvent:
     tool_name: str
     status: str | None
+
+
+@dataclass
+class AgentResult:
+    output: str
+    finish_reason: Literal["done", "max_iterations_reached"]
 ```

@@ -6,6 +6,7 @@ from pathlib import Path
 from llmify import ChatOpenAI
 
 from agentory import Agent, MCPServerStdio, ToolCallEvent
+from agentory.views import AgentResult
 
 from dotenv import load_dotenv
 
@@ -32,8 +33,8 @@ async def main() -> None:
     async for event in agent.run(f"List the files in {WORK_DIR}."):
         if isinstance(event, ToolCallEvent):
             print(f"[tool] {event.tool_name}: {event.status or ''}")
-        else:
-            print(event)
+        elif isinstance(event, AgentResult):
+            print(event.output)
 
     await agent.close()
 
