@@ -16,8 +16,8 @@ class ToolContext:
         @tools.action("Create page", param_model=CreatePageParams)
         async def create_page(
             params: CreatePageParams,
-            client: ToolContext.Inject[NotionClient],
-        ) -> ActionResult:
+            client: Inject[NotionClient],
+        ) -> CreatePageResult:
             ...
     """
 
@@ -54,8 +54,11 @@ class ToolContext:
 
     def resolve(self, expected_type: type[T]) -> T | None:
         for dep in self._dependencies:
-            if isinstance(dep, expected_type):
-                return dep
+            try:
+                if isinstance(dep, expected_type):
+                    return dep
+            except TypeError:
+                continue
         return None
 
     def __len__(self) -> int:
@@ -66,3 +69,6 @@ class ToolContext:
 class _InjectMarker:
     def __repr__(self) -> str:
         return "ToolContext.Inject"
+
+
+Inject = ToolContext.Inject

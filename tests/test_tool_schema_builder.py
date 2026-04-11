@@ -3,7 +3,7 @@ from typing import Annotated
 
 from pydantic import BaseModel, Field
 
-from agentory.tools.inject import Inject
+from agentory.tools.di import Inject
 from agentory.tools.schema_builder import ToolSchemaBuilder
 
 

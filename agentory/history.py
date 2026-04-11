@@ -1,22 +1,17 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import Any, Protocol
+from typing import Any, Protocol, runtime_checkable
 
 
-class HistoryManager(Protocol):
-    """Interface for agent message history implementations."""
-
+@runtime_checkable
+class MessageStore(Protocol):
     def append(self, message: Any) -> None: ...
-
     def messages(self) -> Sequence[Any]: ...
-
     def reset(self, system_message: Any) -> None: ...
 
 
-class InMemoryHistoryManager:
-    """Default list-backed history manager."""
-
+class InMemoryMessageStore:
     def __init__(self) -> None:
         self._messages: list[Any] = []
 

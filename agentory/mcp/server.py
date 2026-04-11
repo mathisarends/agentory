@@ -1,4 +1,4 @@
-from abc import ABC, abstractmethod
+import abc
 import asyncio
 import json
 import logging
@@ -24,17 +24,17 @@ from agentory.tools.views import Tool
 logger = logging.getLogger(__name__)
 
 
-class MCPServer(ABC):
-    @abstractmethod
+class MCPServer(abc.ABC):
+    @abc.abstractmethod
     async def connect(self): ...
 
-    @abstractmethod
+    @abc.abstractmethod
     async def cleanup(self): ...
 
-    @abstractmethod
+    @abc.abstractmethod
     async def list_tools(self) -> list[Tool]: ...
 
-    @abstractmethod
+    @abc.abstractmethod
     async def call_tool(
         self, tool_name: str, arguments: dict[str, Any] | None
     ) -> dict: ...

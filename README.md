@@ -84,16 +84,16 @@ A registry that turns plain functions into LLM-callable tools.
 ```python
 tools = Tools()
 
-@tools.action("Fetch the content of a URL.", status=lambda a: a["url"])
+@tools.action("Fetch the content of a URL.", status_label="Fetching URL")
 async def fetch(url: str) -> str:
     ...
 ```
 
 - **`description`** – shown to the LLM in the tool schema.
 - **`name`** – overrides the function name.
-- **`status`** – a string or callable producing a human-readable status shown during streaming.
+- **`status_label`** – either a string, or a callable that receives the typed `params` model and returns a human-readable status shown during streaming.
+- **`status`** – backward-compatible alias for `status_label`.
 - **`params`** – optional Pydantic model used for argument validation/schema generation.
-- **`result_adapter`** – optional adapter to shape successful/failed tool outputs.
 
 Type hints on parameters are automatically converted to JSON Schema. Use `Annotated[str, "description"]` to attach per-parameter descriptions.
 
@@ -108,24 +108,28 @@ class SearchParams(BaseModel):
     limit: int = 5
 
 
-@tools.action("Search docs.", params=SearchParams, status=lambda p: f"Searching {p.query}")
+@tools.action(
+    "Search docs.",
+    params=SearchParams,
+    status_label=lambda p: f"Searching {p.query}",
+)
 def search(params: SearchParams) -> str:
     ...
 ```
 
 #### Dependency Injection with `Inject`
 
-Use `tools.provide()` to register dependencies and `Annotated[..., Inject]` to mark parameters for injection. Only parameters explicitly marked with `Inject` are injected — no magic type guessing.
+Use `Inject[...]` to mark parameters for dependency injection. The `Agent` wires tool context automatically and always provides the active message store as injectable. You can add your own dependencies as flat `injectables=[...]` on `Agent`.
 
 ```python
 from typing import Annotated
 from agentory import Agent, Inject, Tools
+from agentory.history import MessageStore
 
 class SpotifyClient: ...
 class UnsplashClient: ...
 
 tools = Tools()
-tools.provide(SpotifyClient(), UnsplashClient())
 
 @tools.action("Search tracks on Spotify.")
 async def search_tracks(spotify: Annotated[SpotifyClient, Inject], query: str) -> str:
@@ -135,19 +139,19 @@ async def search_tracks(spotify: Annotated[SpotifyClient, Inject], query: str) -
 async def search_photos(unsplash: Annotated[UnsplashClient, Inject], query: str) -> str:
     ...
 
-agent = Agent(instructions="...", llm=llm, tools=tools)
+@tools.action("Count stored messages.")
+def message_count(store: Inject[MessageStore]) -> int:
+    return len(store.messages())
+
+agent = Agent(
+    instructions="...",
+    llm=llm,
+    tools=tools,
+    injectables=[SpotifyClient(), UnsplashClient()],
+)
 ```
 
-`provide()` extends (not replaces) the dependency list and returns `self` for chaining:
-
-```python
-tools = Tools()
-tools.provide(spotify_client).provide(unsplash_client)
-```
-
-Use `tools.clear_dependencies()` to reset all registered dependencies.
-
-For explicit context management, you can set a `ToolContext` object directly:
+For explicit context management, you can still set or replace a `ToolContext` directly on `Tools`:
 
 ```python
 from agentory import ToolContext

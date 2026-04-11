@@ -1,11 +1,10 @@
-from typing import Any
 from unittest.mock import AsyncMock
 
 import pytest
 from pydantic import BaseModel
 
-from agentory.tools.context import ToolContext
-from agentory.tools.inject import Inject
+from agentory.history import InMemoryMessageStore, MessageStore
+from agentory.tools.di import Inject, ToolContext
 from agentory.tools.tools import Tools
 from agentory.tools.views import Tool
 
@@ -30,14 +29,6 @@ class _AnotherService:
 
 class _EchoParams(BaseModel):
     text: str
-
-
-class _DictResultAdapter:
-    def on_success(self, *, tool: Tool, result: Any) -> dict[str, Any]:
-        return {"tool": tool.name, "ok": True, "result": result}
-
-    def on_error(self, *, tool: Tool, error: Exception) -> dict[str, Any]:
-        return {"tool": tool.name, "ok": False, "error": str(error)}
 
 
 class TestToolsRegisterAndGet:
@@ -118,26 +109,12 @@ class TestToolsExecute:
         ) -> str:
             return f"echo:{params.text}:{svc.name}"
 
-        tools.provide(_AnotherService("svc"))
+        tools.set_context(ToolContext(_AnotherService("svc")))
         result = await tools.execute("echo", {"text": "hello"})
         assert result == "echo:hello:svc"
 
-    @pytest.mark.asyncio
-    async def test_execute_uses_custom_result_adapter(self) -> None:
-        tools = Tools()
 
-        @tools.action(
-            description="echo",
-            result_adapter=_DictResultAdapter(),
-        )
-        def echo(x: str) -> str:
-            return f"echo:{x}"
-
-        result = await tools.execute("echo", {"x": "hello"})
-        assert result == {"tool": "echo", "ok": True, "result": "echo:hello"}
-
-
-class TestToolsProvide:
+class TestToolsContextInjection:
     @pytest.mark.asyncio
     async def test_single_dependency_injected(self) -> None:
         tools = Tools()
@@ -146,7 +123,7 @@ class TestToolsProvide:
         def ctx_tool(x: str, ctx: Inject[_FakeContext] = None) -> str:
             return f"{x}:{ctx.value}"
 
-        tools.provide(_FakeContext("my_context"))
+        tools.set_context(ToolContext(_FakeContext("my_context")))
         result = await tools.execute("ctx_tool", {"x": "val"})
         assert result == "val:my_context"
 
@@ -162,7 +139,7 @@ class TestToolsProvide:
         ) -> str:
             return f"{x}:{ctx.value}:{svc.name}"
 
-        tools.provide(_FakeContext("fc"), _AnotherService("as"))
+        tools.set_context(ToolContext(_FakeContext("fc"), _AnotherService("as")))
         result = await tools.execute("multi", {"x": "hi"})
         assert result == "hi:fc:as"
 
@@ -174,7 +151,7 @@ class TestToolsProvide:
         def single(x: str, svc: Inject[_AnotherService] = None) -> str:
             return f"{x}:{svc.name}"
 
-        tools.provide(_FakeContext("ignored"), _AnotherService("used"))
+        tools.set_context(ToolContext(_FakeContext("ignored"), _AnotherService("used")))
         result = await tools.execute("single", {"x": "hi"})
         assert result == "hi:used"
 
@@ -186,40 +163,30 @@ class TestToolsProvide:
         def plain(x: str) -> str:
             return f"plain:{x}"
 
-        tools.provide(_FakeContext("ctx"))
+        tools.set_context(ToolContext(_FakeContext("ctx")))
         result = await tools.execute("plain", {"x": "a"})
         assert result == "plain:a"
 
-    def test_provide_extends_not_replaces(self) -> None:
+    def test_context_clear_dependencies(self) -> None:
         tools = Tools()
-        tools.provide(_FakeContext("a"))
-        tools.provide(_AnotherService("b"))
-        assert len(tools._context) == 2
-
-    def test_provide_returns_self_for_chaining(self) -> None:
-        tools = Tools()
-        result = tools.provide(_FakeContext("a"))
-        assert result is tools
-
-    def test_clear_dependencies(self) -> None:
-        tools = Tools()
-        tools.provide(_FakeContext("a"), _AnotherService("b"))
-        tools.clear_dependencies()
+        context = ToolContext(_FakeContext("a"), _AnotherService("b"))
+        tools.set_context(context)
+        context.clear()
         assert len(tools._context) == 0
-
-    def test_clear_dependencies_returns_self(self) -> None:
-        tools = Tools()
-        result = tools.clear_dependencies()
-        assert result is tools
 
     def test_set_context_replaces_existing_context(self) -> None:
         tools = Tools()
-        tools.provide(_FakeContext("a"))
+        tools.set_context(ToolContext(_FakeContext("a")))
 
         new_context = ToolContext().provide(_FakeContext("b"))
         tools.set_context(new_context)
 
         assert tools._context.resolve(_FakeContext).value == "b"
+
+    def test_set_context_returns_self_for_chaining(self) -> None:
+        tools = Tools()
+        result = tools.set_context(ToolContext(_FakeContext("a")))
+        assert result is tools
 
     @pytest.mark.asyncio
     async def test_unannotated_custom_type_not_injected(self) -> None:
@@ -230,9 +197,23 @@ class TestToolsProvide:
         def bare(x: str, ctx: _FakeContext = None) -> str:
             return f"{x}:{ctx}"
 
-        tools.provide(_FakeContext("should_not_appear"))
+        tools.set_context(ToolContext(_FakeContext("should_not_appear")))
         result = await tools.execute("bare", {"x": "hi"})
         assert result == "hi:None"
+
+    @pytest.mark.asyncio
+    async def test_message_store_protocol_is_injected(self) -> None:
+        tools = Tools()
+
+        @tools.action(description="count history")
+        def history_count(store: Inject[MessageStore]) -> int:
+            return len(store.messages())
+
+        store = InMemoryMessageStore()
+        tools.set_context(ToolContext(store))
+
+        result = await tools.execute("history_count", {})
+        assert result == 0
 
 
 class TestToolsSchema:

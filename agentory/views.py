@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from typing import Literal
 
 
 @dataclass
@@ -7,4 +8,10 @@ class ToolCallEvent:
     status: str | None
 
 
-type StreamEvent = str | ToolCallEvent
+@dataclass
+class AgentResult:
+    output: str
+    finish_reason: Literal["done", "max_iterations_reached"]
+
+
+type StreamEvent = ToolCallEvent | AgentResult

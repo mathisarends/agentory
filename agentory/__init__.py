@@ -1,16 +1,16 @@
 from .agent import Agent
-from .history import HistoryManager, InMemoryHistoryManager
+from .history import MessageStore, InMemoryMessageStore
 from .mcp import MCPServer, MCPServerStdio
 from .skills import Skill
-from .tools import Inject, ToolContext, ToolResultAdapter, Tools
+from .tools import Inject, ToolContext, Tools
 from .tools.views import Tool
 from .views import StreamEvent, ToolCallEvent
 
 __all__ = [
     "Agent",
-    "HistoryManager",
+    "MessageStore",
     "Inject",
-    "InMemoryHistoryManager",
+    "InMemoryMessageStore",
     "MCPServer",
     "MCPServerStdio",
     "Skill",
@@ -18,6 +18,5 @@ __all__ = [
     "Tool",
     "ToolCallEvent",
     "ToolContext",
-    "ToolResultAdapter",
     "Tools",
 ]

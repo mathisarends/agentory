@@ -3,11 +3,12 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from llmify.messages import Function, ToolCall, ToolResultMessage, UserMessage
+from pydantic import BaseModel
 
 from agentory.agent import Agent
 from agentory.skills import Skill
 from agentory.tools.tools import Tools
-from agentory.views import ToolCallEvent
+from agentory.views import AgentResult, ToolCallEvent
 
 
 def _make_llm_response(completion: str | None = None, tool_calls: list | None = None):
@@ -49,13 +50,13 @@ class TestAgentInit:
     def test_system_prompt_set(self) -> None:
         llm = AsyncMock()
         agent = Agent(instructions="You are a helper.", llm=llm)
-        assert agent._history[0].content == "You are a helper."
+        assert list(agent._message_store.messages())[0].content == "You are a helper."
 
     def test_system_prompt_with_skills(self) -> None:
         llm = AsyncMock()
         skill = Skill(name="s", description="d", instructions="Do X")
         agent = Agent(instructions="Base", llm=llm, skills=[skill])
-        prompt = agent._history[0].content
+        prompt = list(agent._message_store.messages())[0].content
         assert "Base" in prompt
         assert "<skills>" in prompt
         assert "Do X" in prompt
@@ -72,7 +73,7 @@ class TestAgentRun:
         async for event in agent.run("Hi"):
             events.append(event)
 
-        assert events == ["Hello!"]
+        assert any(isinstance(e, AgentResult) and e.output == "Hello!" for e in events)
 
     @pytest.mark.asyncio
     async def test_tool_call_flow(self) -> None:
@@ -97,7 +98,43 @@ class TestAgentRun:
         assert any(
             isinstance(e, ToolCallEvent) and e.tool_name == "add" for e in events
         )
-        assert "The sum is 3" in events
+        assert any(
+            isinstance(e, AgentResult) and e.output == "The sum is 3" for e in events
+        )
+
+    @pytest.mark.asyncio
+    async def test_tool_call_event_renders_status_label(self) -> None:
+        tools = Tools()
+
+        class _EchoParams(BaseModel):
+            x: str
+
+        @tools.action(
+            description="echo",
+            params=_EchoParams,
+            status_label=lambda p: f"Echo {p.x}",
+        )
+        def echo(params: _EchoParams) -> str:
+            return params.x
+
+        tool_call = _make_tool_call("c1", "echo", {"x": "hi"})
+        llm = AsyncMock()
+        llm.invoke.side_effect = [
+            _make_llm_response(tool_calls=[tool_call]),
+            _make_llm_response(completion="done"),
+        ]
+
+        agent = Agent(instructions="test", llm=llm, tools=tools)
+        events: list = []
+        async for event in agent.run("echo hi"):
+            events.append(event)
+
+        assert any(
+            isinstance(e, ToolCallEvent)
+            and e.tool_name == "echo"
+            and e.status == "Echo hi"
+            for e in events
+        )
 
     @pytest.mark.asyncio
     async def test_max_iterations_stops_loop(self) -> None:
@@ -116,7 +153,10 @@ class TestAgentRun:
         async for event in agent.run("loop"):
             events.append(event)
 
-        assert "[max iterations reached]" in events
+        assert any(
+            isinstance(e, AgentResult) and e.finish_reason == "max_iterations_reached"
+            for e in events
+        )
 
     @pytest.mark.asyncio
     async def test_tool_exception_captured_as_error(self) -> None:
@@ -138,7 +178,7 @@ class TestAgentRun:
         async for event in agent.run("do it"):
             events.append(event)
 
-        assert "Done" in events
+        assert any(isinstance(e, AgentResult) and e.output == "Done" for e in events)
 
     @pytest.mark.asyncio
     async def test_non_string_tool_result_is_serialized_for_history(self) -> None:
@@ -159,7 +199,11 @@ class TestAgentRun:
         async for _ in agent.run("run"):
             pass
 
-        tool_messages = [m for m in agent._history if isinstance(m, ToolResultMessage)]
+        tool_messages = [
+            m
+            for m in agent._message_store.messages()
+            if isinstance(m, ToolResultMessage)
+        ]
         assert len(tool_messages) == 1
         assert tool_messages[0].content == '{"value": 7}'
 
@@ -172,7 +216,7 @@ class TestAgentRun:
         agent = Agent(
             instructions="test",
             llm=llm,
-            history_manager=history_manager,
+            message_store=history_manager,
         )
         async for _ in agent.run("Hi"):
             pass
@@ -185,13 +229,13 @@ class TestAgentReset:
     def test_reset_clears_history(self) -> None:
         llm = AsyncMock()
         agent = Agent(instructions="test", llm=llm)
-        agent._history.append(MagicMock())
-        agent._history.append(MagicMock())
-        assert len(agent._history) > 1
+        agent._message_store.append(MagicMock())
+        agent._message_store.append(MagicMock())
+        assert len(list(agent._message_store.messages())) > 1
 
         agent.reset()
-        assert len(agent._history) == 1
-        assert agent._history[0].content == "test"
+        assert len(list(agent._message_store.messages())) == 1
+        assert list(agent._message_store.messages())[0].content == "test"
 
 
 class TestAgentMCP:

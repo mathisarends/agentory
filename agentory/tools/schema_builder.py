@@ -16,7 +16,7 @@ from typing import (
 
 from pydantic import BaseModel
 
-from agentory.tools.inject import _InjectMarker
+from agentory.tools.di import _InjectMarker
 
 
 def is_injectable(hint: Any) -> bool:
