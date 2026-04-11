@@ -59,7 +59,97 @@ class TestAgentInit:
         prompt = list(agent._message_store.messages())[0].content
         assert "Base" in prompt
         assert "<skills>" in prompt
-        assert "Do X" in prompt
+        assert '<skill name="s">' in prompt
+        assert "<description>d</description>" in prompt
+        # Level 1: only metadata in system prompt, NOT full instructions
+        assert "Do X" not in prompt
+
+
+class TestAgentSkillTools:
+    @pytest.mark.asyncio
+    async def test_read_skill_tool_returns_full_instructions(self) -> None:
+        llm = AsyncMock()
+        skill = Skill(
+            name="research",
+            description="How to research",
+            instructions="Step 1\nStep 2",
+        )
+        agent = Agent(instructions="Base", llm=llm, skills=[skill])
+
+        result = await agent.tools.execute("read_skill", {"skill_name": "research"})
+        assert "Step 1" in result
+        assert "Step 2" in result
+
+    @pytest.mark.asyncio
+    async def test_read_skill_tool_unknown_skill(self) -> None:
+        llm = AsyncMock()
+        skill = Skill(name="research", description="d", instructions="x")
+        agent = Agent(instructions="Base", llm=llm, skills=[skill])
+
+        result = await agent.tools.execute("read_skill", {"skill_name": "nope"})
+        assert "Unknown skill" in result
+        assert "research" in result
+
+    @pytest.mark.asyncio
+    async def test_read_skill_file_returns_content(self, tmp_path) -> None:
+        (tmp_path / "SKILL.md").write_text(
+            "---\nname: my-skill\ndescription: d\n---\nMain instructions.",
+            encoding="utf-8",
+        )
+        (tmp_path / "FORMS.md").write_text("Form instructions here.", encoding="utf-8")
+        skill = Skill.from_directory(tmp_path)
+
+        llm = AsyncMock()
+        agent = Agent(instructions="Base", llm=llm, skills=[skill])
+
+        result = await agent.tools.execute(
+            "read_skill_file", {"skill_name": "my-skill", "filename": "FORMS.md"}
+        )
+        assert "Form instructions here." in result
+
+    @pytest.mark.asyncio
+    async def test_read_skill_file_missing_file(self) -> None:
+        llm = AsyncMock()
+        skill = Skill(name="s", description="d", instructions="x")
+        agent = Agent(instructions="Base", llm=llm, skills=[skill])
+
+        result = await agent.tools.execute(
+            "read_skill_file", {"skill_name": "s", "filename": "nope.md"}
+        )
+        assert "not found" in result.lower() or "no source directory" in result.lower()
+
+    @pytest.mark.asyncio
+    async def test_read_skill_lists_bundled_files(self, tmp_path) -> None:
+        (tmp_path / "SKILL.md").write_text(
+            "---\nname: pdf\ndescription: PDF stuff\n---\nInstructions.",
+            encoding="utf-8",
+        )
+        (tmp_path / "FORMS.md").write_text("forms", encoding="utf-8")
+        (tmp_path / "REFERENCE.md").write_text("ref", encoding="utf-8")
+        skill = Skill.from_directory(tmp_path)
+
+        llm = AsyncMock()
+        agent = Agent(instructions="Base", llm=llm, skills=[skill])
+
+        result = await agent.tools.execute("read_skill", {"skill_name": "pdf"})
+        assert "FORMS.md" in result
+        assert "REFERENCE.md" in result
+
+    def test_no_skill_tools_when_no_skills(self) -> None:
+        llm = AsyncMock()
+        agent = Agent(instructions="Base", llm=llm)
+        assert agent.tools.get("read_skill") is None
+        assert agent.tools.get("read_skill_file") is None
+
+    @pytest.mark.asyncio
+    async def test_skill_tools_in_schema(self) -> None:
+        llm = AsyncMock()
+        skill = Skill(name="s", description="d", instructions="x")
+        agent = Agent(instructions="Base", llm=llm, skills=[skill])
+        schema = agent.tools.to_schema()
+        tool_names = [t["function"]["name"] for t in schema]
+        assert "read_skill" in tool_names
+        assert "read_skill_file" in tool_names
 
 
 class TestAgentRun:

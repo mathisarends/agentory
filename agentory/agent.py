@@ -47,6 +47,7 @@ class Agent[Context]:
         self._injectables = tuple(injectables or ())
         self._mcp_connected = False
 
+        self.tools.register_skills(self._skills)
         self._wire_tool_context()
         self._message_store.reset(SystemMessage(content=self._build_system_prompt()))
 
@@ -60,8 +61,8 @@ class Agent[Context]:
     def _build_system_prompt(self) -> str:
         if not self._skills:
             return self._instructions
-        skills_block = "\n\n".join(skill.render() for skill in self._skills)
-        return f"{self._instructions}\n\n<skills>\n{skills_block}\n</skills>"
+        metadata_block = "\n".join(skill.render_metadata() for skill in self._skills)
+        return f"{self._instructions}\n\n<skills>\n{metadata_block}\n</skills>"
 
     async def prewarm(self) -> Self:
         """Eagerly connect MCP servers. Optional – stream/run connect lazily if not called."""

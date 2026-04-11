@@ -17,10 +17,18 @@ from typing import (
 from pydantic import BaseModel
 
 from agentory.tools.di import _InjectMarker, ToolContext
-from agentory.tools.views import Tool, ToolSchema, DoneParams, DONE_TOOL_NAME
+from agentory.tools.views import (
+    Tool,
+    ToolSchema,
+    DoneParams,
+    ReadSkillParams,
+    ReadSkillFileParams,
+    DONE_TOOL_NAME,
+)
 
 if TYPE_CHECKING:
-    from agentory.mcp.server import MCPServer
+    from agentory.mcp import MCPServer
+    from agentory.skills import Skill
 
 logger = logging.getLogger(__name__)
 
@@ -38,9 +46,6 @@ class Tools:
         if use_done_tool:
             self._register_done_tool()
 
-    def is_done_tool(self, name: str) -> bool:
-        return self._use_done_tool and name == DONE_TOOL_NAME
-
     def _register_done_tool(self) -> None:
         @self.action(
             name=DONE_TOOL_NAME,
@@ -49,6 +54,9 @@ class Tools:
         )
         async def done(params: DoneParams) -> str:
             return params.output
+
+    def is_done_tool(self, name: str) -> bool:
+        return self._use_done_tool and name == DONE_TOOL_NAME
 
     def set_context(self, context: ToolContext) -> Tools:
         self._context = context
@@ -185,6 +193,43 @@ class Tools:
         if get_origin(hint) is not Annotated:
             return False
         return any(isinstance(a, _InjectMarker) for a in get_args(hint))
+
+    def register_skills(self, skills: list[Skill]) -> None:
+        if not skills:
+            return
+        skills_by_name: dict[str, Skill] = {s.name: s for s in skills}
+
+        @self.action(
+            description="Load the full instructions of a skill. Use when the user's request matches a skill description.",
+            params=ReadSkillParams,
+        )
+        async def read_skill(params: ReadSkillParams) -> str:
+            skill = skills_by_name.get(params.skill_name)
+            if skill is None:
+                available = list(skills_by_name.keys())
+                return f"Unknown skill '{params.skill_name}'. Available: {available}"
+            files = skill.list_files()
+            result = skill.render()
+            if files:
+                result += f"\n\nBundled files available via read_skill_file: {files}"
+            return result
+
+        @self.action(
+            description="Read an additional file bundled with a skill.",
+            params=ReadSkillFileParams,
+        )
+        async def read_skill_file(params: ReadSkillFileParams) -> str:
+            skill = skills_by_name.get(params.skill_name)
+            if skill is None:
+                available = list(skills_by_name.keys())
+                return f"Unknown skill '{params.skill_name}'. Available: {available}"
+            try:
+                return skill.read_file(params.filename)
+            except FileNotFoundError:
+                available = skill.list_files()
+                return f"File '{params.filename}' not found. Available: {available}"
+            except ValueError as e:
+                return str(e)
 
     async def register_mcp_server(self, server: MCPServer) -> None:
         tools = await server.list_tools()

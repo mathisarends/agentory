@@ -162,8 +162,17 @@ def _make_dummy(param_model: type[BaseModel]) -> BaseModel:
     return param_model.model_construct(**defaults)
 
 
+DONE_TOOL_NAME = "done"
+
+
 class DoneParams(BaseModel):
     output: str = Field(description="The final answer or result to return to the user")
 
 
-DONE_TOOL_NAME = "done"
+class ReadSkillParams(BaseModel):
+    skill_name: str = Field(description="The name of the skill to load.")
+
+
+class ReadSkillFileParams(BaseModel):
+    skill_name: str = Field(description="The name of the skill that owns the file.")
+    filename: str = Field(description="The name of the file to read from the skill.")

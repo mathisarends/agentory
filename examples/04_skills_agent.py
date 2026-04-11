@@ -1,4 +1,10 @@
-"""Agent with skills — reusable prompt fragments injected into the system prompt."""
+"""Agent with skills — progressive disclosure of expertise.
+
+Skills use Anthropic's 3-level progressive disclosure:
+  Level 1: Only name + description in the system prompt (metadata)
+  Level 2: Full SKILL.md instructions loaded on-demand via read_skill tool
+  Level 3: Additional bundled files loaded via read_skill_file tool
+"""
 
 import asyncio
 
